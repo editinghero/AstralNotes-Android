@@ -76,7 +76,15 @@ class NoteRepository(
     }
 
     suspend fun clearTrash() {
+        val trashNotes = noteDao.getTrashNotesSync()
         noteDao.clearTrash()
+        if (authManager.isSignedIn) {
+            repositoryScope.launch {
+                trashNotes.forEach { note ->
+                    authManager.deleteNoteFromFirestore(note.id)
+                }
+            }
+        }
     }
 
     suspend fun setNoteLockState(note: Note, isLocked: Boolean) {

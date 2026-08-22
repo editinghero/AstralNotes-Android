@@ -33,6 +33,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE isTrash = 1 ORDER BY updatedAt DESC")
     fun getTrashNotes(): Flow<List<Note>>
 
+    @Query("SELECT * FROM notes WHERE isTrash = 1")
+    suspend fun getTrashNotesSync(): List<Note>
+
     @Query("SELECT * FROM notes WHERE isLocked = 1 AND isTrash = 0 ORDER BY updatedAt DESC")
     fun getLockedNotes(): Flow<List<Note>>
 
