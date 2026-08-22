@@ -63,12 +63,38 @@ class AuthManager(private val context: Context) {
     val userPhotoUrl: String?
         get() = _currentUser.value?.photoUrl?.toString()
 
-    suspend fun signInWithGoogle(webClientId: String = "104727491603-default.apps.googleusercontent.com"): Result<FirebaseUser> {
+    private val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+
+    var customWebClientId: String
+        get() = prefs.getString("custom_web_client_id", "") ?: ""
+        set(value) = prefs.edit().putString("custom_web_client_id", value).apply()
+
+    fun getEffectiveWebClientId(): String {
+        if (customWebClientId.isNotBlank()) return customWebClientId.trim()
+        try {
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+            if (resId != 0) {
+                val found = context.getString(resId)
+                if (found.isNotBlank()) return found.trim()
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        return ""
+    }
+
+    suspend fun signInWithGoogle(webClientId: String? = null): Result<FirebaseUser> {
+        val clientId = webClientId?.ifBlank { null } ?: getEffectiveWebClientId()
+        if (clientId.isBlank()) {
+            return Result.failure(
+                Exception("OAuth Web Client ID not configured. In Firebase Console > Authentication > Google, copy your Web Client ID and paste it in Settings, or re-download google-services.json.")
+            )
+        }
         return try {
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
-                .setServerClientId(webClientId)
-                .setAutoSelectEnabled(true)
+                .setServerClientId(clientId)
+                .setAutoSelectEnabled(false)
                 .build()
 
             val request = GetCredentialRequest.Builder()

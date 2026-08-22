@@ -526,6 +526,21 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                     )
 
+                    var customWebClientId by remember { mutableStateOf(authManager.customWebClientId) }
+
+                    OutlinedTextField(
+                        value = customWebClientId,
+                        onValueChange = {
+                            customWebClientId = it
+                            authManager.customWebClientId = it.trim()
+                        },
+                        label = { Text("Firebase Web Client ID") },
+                        placeholder = { Text("173977964592-xxxx.apps.googleusercontent.com") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("settings_web_client_id")
+                    )
+
                     if (authManager.isSignedIn) {
                         FilledTonalButton(
                             onClick = onManualSync,
@@ -561,7 +576,7 @@ fun SettingsScreen(
                                         Toast.makeText(context, "Signed in as ${it.displayName}", Toast.LENGTH_SHORT).show()
                                     }
                                     res.onFailure {
-                                        Toast.makeText(context, "Sign in canceled or not configured: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "${it.localizedMessage}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },
