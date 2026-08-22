@@ -8,7 +8,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.astralquarks.notes.model.Note
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
@@ -83,15 +82,8 @@ class AuthManager(private val context: Context) {
             val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(clientId)
                 .build()
 
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
-                .setServerClientId(clientId)
-                .setAutoSelectEnabled(false)
-                .build()
-
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(signInWithGoogleOption)
-                .addCredentialOption(googleIdOption)
                 .build()
 
             val result = credentialManager.getCredential(
