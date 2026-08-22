@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "173977964592",
+    "project_id": "astralnotes-android",
+    "storage_bucket": "astralnotes-android.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:173977964592:android:a86fe590bc8917891b5df5",
+        "android_client_info": {
+          "package_name": "com.astralquarks.notes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhQdXCl02D6E1WjKKZz3IdC7UVsqsGMcU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

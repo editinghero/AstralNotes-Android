@@ -1,0 +1,24 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Explicit binary files
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.keystore binary
+*.jks binary
+*.so binary
+*.aar binary
+*.zip binary
+*.tar.gz binary
+*.ico binary
+
+# Shell scripts
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows batch scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf

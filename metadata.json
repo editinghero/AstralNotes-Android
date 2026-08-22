@@ -1,0 +1,6 @@
+{
+  "name": "AstralNotes",
+  "description": "Android 17 Material Expressive full Markdown note-taking app with Google Keep styling, locked vault, Firebase sync, Gemini AI, tagging, home widget, and multi-format export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
