@@ -1,6 +1,8 @@
 package com.astralquarks.notes.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,6 +50,9 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
 
     val isVaultUnlocked: StateFlow<Boolean> = vaultSecurityManager.isVaultUnlocked
 
+    private val appPrefs: SharedPreferences =
+        application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -80,9 +85,11 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
 
         // Insert a welcome note if the database is fresh
         viewModelScope.launch {
-            val existing = repository.getNoteById("welcome_expressive_note")
-            if (existing == null && activeNotes.value.isEmpty()) {
-                val welcome = Note(
+            val isWelcomeNoteCreated = appPrefs.getBoolean("is_welcome_note_created", false)
+            if (!isWelcomeNoteCreated) {
+                val existing = repository.getNoteById("welcome_expressive_note")
+                if (existing == null) {
+                    val welcome = Note(
                     id = "welcome_expressive_note",
                     title = "Welcome to AstralNotes",
                     content = """
@@ -120,11 +127,13 @@ fun main() {
 | Private Vault | Hidden and Locked | Custom PIN + Biometric |
                     """.trimIndent(),
                     colorHex = "#DEFAULT",
-                    tags = listOf("welcome", "guide", "markdown"),
-                    isPinned = true
-                )
-                repository.saveNote(welcome)
-                QuickNoteWidgetProvider.updateAllWidgets(application)
+                        tags = listOf("welcome", "guide", "markdown"),
+                        isPinned = true
+                    )
+                    repository.saveNote(welcome)
+                    QuickNoteWidgetProvider.updateAllWidgets(application)
+                }
+                appPrefs.edit().putBoolean("is_welcome_note_created", true).apply()
             }
         }
     }
