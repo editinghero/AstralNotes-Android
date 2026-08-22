@@ -12,7 +12,20 @@
           "package_name": "com.astralquarks.notes"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "173977964592-em5sl9ebjnil6r904fj08f4vt3qv26f4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.astralquarks.notes",
+            "certificate_hash": "08c2678fa854448abad0e712d4ab24e4cc264f38"
+          }
+        },
+        {
+          "client_id": "173977964592-mqo6ac19i53stper4p2l843bn3220qea.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDhQdXCl02D6E1WjKKZz3IdC7UVsqsGMcU"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "173977964592-mqo6ac19i53stper4p2l843bn3220qea.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
