@@ -76,7 +76,7 @@ class AuthManager(private val context: Context) {
         return ""
     }
 
-    suspend fun signInWithGoogle(): Result<FirebaseUser> {
+    suspend fun signInWithGoogle(activityContext: Context = context): Result<FirebaseUser> {
         val clientId = getEffectiveWebClientId()
         if (clientId.isBlank()) {
             return Result.failure(
@@ -96,7 +96,7 @@ class AuthManager(private val context: Context) {
 
             val result = credentialManager.getCredential(
                 request = request,
-                context = context
+                context = activityContext
             )
 
             val credential = result.credential

@@ -236,7 +236,7 @@ fun SettingsScreen(
                             onClick = {
                                 scope.launch {
                                     isSigningIn = true
-                                    val res = authManager.signInWithGoogle()
+                                    val res = authManager.signInWithGoogle(context)
                                     isSigningIn = false
                                     res.onSuccess {
                                         Toast.makeText(context, "Signed in as ${it.displayName ?: it.email}", Toast.LENGTH_SHORT).show()
