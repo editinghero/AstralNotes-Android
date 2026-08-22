@@ -2,6 +2,8 @@
 
 AstralNotes is a modern, high-performance note-taking and personal knowledge app built with Jetpack Compose, Material 3 Expressive design, local Room database persistence, Google Gemini AI intelligence, and optional Firebase Cloud Sync.
 
+## Screenshot 
+[Instagram](https://www.instagram.com/p/DcVwyKWkj9i/?img_index=4)
 ## Features
 
 - **Material 3 Expressive Design** - Fluid adaptive layouts, custom pastel note tints, contrast-optimized dark and light modes, and Google Keep-style ease of use.
