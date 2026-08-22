@@ -10,6 +10,8 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.astralquarks.notes.markdown.MarkdownBlock
+import com.astralquarks.notes.markdown.MarkdownParser
 import com.astralquarks.notes.model.Note
 import java.io.File
 import java.io.FileOutputStream
@@ -80,6 +82,21 @@ object NoteExporter {
         context.startActivity(Intent.createChooser(intent, "Share Markdown Note via"))
     }
 
+    private fun renderHtmlInline(text: String): String {
+        return text
+            .replace(Regex("&"), "&amp;")
+            .replace(Regex("<"), "&lt;")
+            .replace(Regex(">"), "&gt;")
+            .replace(Regex("\\*\\*(.*?)\\*\\*"), "<strong>$1</strong>")
+            .replace(Regex("\\*(.*?)\\*"), "<em>$1</em>")
+            .replace(Regex("~~(.*?)~~"), "<del>$1</del>")
+            .replace(Regex("==(.*?)==|<mark>(.*?)</mark>"), "<mark>$1</mark>")
+            .replace(Regex("!\\[(.*?)\\]\\((https?://.*?)\\)"), "<img src=\"$2\" alt=\"$1\" style=\"max-width:100%; border-radius:12px; margin:12px 0;\" />")
+            .replace(Regex("\\[(.*?)\\]\\((https?://.*?)\\)"), "<a href=\"$2\" target=\"_blank\">$1</a>")
+            .replace(Regex("`(.*?)`"), "<code>$1</code>")
+            .replace("\n", "<br/>")
+    }
+
     private fun shareAsHtml(context: Context, note: Note) {
         val notesDir = File(context.cacheDir, "notes").apply { mkdirs() }
         val filename = getSanitizedFilename(note.title, "html")
@@ -87,29 +104,89 @@ object NoteExporter {
 
         val dateFormatted = SimpleDateFormat("MMM d, yyyy - HH:mm", Locale.getDefault()).format(Date(note.updatedAt))
 
-        // Basic Markdown to HTML conversion
-        var bodyHtml = note.content
-            .replace(Regex("&"), "&amp;")
-            .replace(Regex("<"), "&lt;")
-            .replace(Regex(">"), "&gt;")
-            // Headings
-            .replace(Regex("(?m)^### (.*?)$"), "<h3>$1</h3>")
-            .replace(Regex("(?m)^## (.*?)$"), "<h2>$1</h2>")
-            .replace(Regex("(?m)^# (.*?)$"), "<h1>$1</h1>")
-            // Checklists
-            .replace(Regex("(?m)^[\\-*+]\\s+\\[x\\]\\s*(.*?)$"), "<div class=\"check done\">&#9745; $1</div>")
-            .replace(Regex("(?m)^[\\-*+]\\s+\\[ \\]\\s*(.*?)$"), "<div class=\"check\">&#9744; $1</div>")
-            // Bold, Italic, Strikethrough, Highlight
-            .replace(Regex("\\*\\*(.*?)\\*\\*"), "<strong>$1</strong>")
-            .replace(Regex("\\*(.*?)\\*"), "<em>$1</em>")
-            .replace(Regex("~~(.*?)~~"), "<del>$1</del>")
-            .replace(Regex("==(.*?)==|<mark>(.*?)</mark>"), "<mark>$1</mark>")
-            // Images
-            .replace(Regex("!\\[(.*?)\\]\\((https?://.*?)\\)"), "<img src=\"$2\" alt=\"$1\" style=\"max-width:100%; border-radius:12px; margin:12px 0;\" />")
-            // Links
-            .replace(Regex("\\[(.*?)\\]\\((https?://.*?)\\)"), "<a href=\"$2\" target=\"_blank\">$1</a>")
-            // Line breaks
-            .replace("\n", "<br/>")
+        // Advanced Markdown to HTML conversion
+        val blocks = MarkdownParser.parse(note.content)
+        val bodyHtmlBuilder = StringBuilder()
+
+        for (block in blocks) {
+            when (block) {
+                is MarkdownBlock.Heading -> {
+                    val htmlContent = renderHtmlInline(block.text)
+                    bodyHtmlBuilder.append("<h${block.level}>$htmlContent</h${block.level}>\n")
+                }
+                is MarkdownBlock.Paragraph -> {
+                    val htmlContent = renderHtmlInline(block.text)
+                    bodyHtmlBuilder.append("<p>$htmlContent</p>\n")
+                }
+                is MarkdownBlock.Blockquote -> {
+                    val classStr = if (block.alertType != null) " class=\"alert alert-${block.alertType.name.lowercase()}\"" else ""
+                    val titleHtml = if (block.alertType != null) "<div class=\"alert-title\">${block.alertType.title}</div>" else ""
+                    val contentHtml = block.lines.joinToString("<br/>") { renderHtmlInline(it) }
+                    bodyHtmlBuilder.append("<blockquote$classStr>$titleHtml$contentHtml</blockquote>\n")
+                }
+                is MarkdownBlock.CodeBlock -> {
+                    val langClass = if (block.language.isNotEmpty()) " class=\"language-${block.language}\"" else ""
+                    val escapedCode = block.code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    bodyHtmlBuilder.append("<pre><code$langClass>$escapedCode</code></pre>\n")
+                }
+                is MarkdownBlock.BulletList -> {
+                    bodyHtmlBuilder.append("<ul>\n")
+                    for (item in block.items) {
+                        bodyHtmlBuilder.append("  <li>${renderHtmlInline(item)}</li>\n")
+                    }
+                    bodyHtmlBuilder.append("</ul>\n")
+                }
+                is MarkdownBlock.NumberedList -> {
+                    bodyHtmlBuilder.append("<ol>\n")
+                    for (item in block.items) {
+                        bodyHtmlBuilder.append("  <li>${renderHtmlInline(item)}</li>\n")
+                    }
+                    bodyHtmlBuilder.append("</ol>\n")
+                }
+                is MarkdownBlock.TaskList -> {
+                    bodyHtmlBuilder.append("<div class=\"task-list\">\n")
+                    for (item in block.items) {
+                        val checkClass = if (item.checked) "check done" else "check"
+                        val checkChar = if (item.checked) "&#9745;" else "&#9744;"
+                        bodyHtmlBuilder.append("  <div class=\"$checkClass\">$checkChar ${renderHtmlInline(item.text)}</div>\n")
+                    }
+                    bodyHtmlBuilder.append("</div>\n")
+                }
+                is MarkdownBlock.Table -> {
+                    bodyHtmlBuilder.append("<table>\n")
+                    bodyHtmlBuilder.append("  <thead>\n    <tr>\n")
+                    for (header in block.headers) {
+                        bodyHtmlBuilder.append("      <th>${renderHtmlInline(header)}</th>\n")
+                    }
+                    bodyHtmlBuilder.append("    </tr>\n  </thead>\n")
+                    bodyHtmlBuilder.append("  <tbody>\n")
+                    for (row in block.rows) {
+                        bodyHtmlBuilder.append("    <tr>\n")
+                        for (cell in row) {
+                            bodyHtmlBuilder.append("      <td>${renderHtmlInline(cell)}</td>\n")
+                        }
+                        bodyHtmlBuilder.append("    </tr>\n")
+                    }
+                    bodyHtmlBuilder.append("  </tbody>\n")
+                    bodyHtmlBuilder.append("</table>\n")
+                }
+                is MarkdownBlock.HorizontalRule -> {
+                    bodyHtmlBuilder.append("<hr/>\n")
+                }
+                is MarkdownBlock.ImageBlock -> {
+                    bodyHtmlBuilder.append("<img src=\"${block.url}\" alt=\"${block.alt}\" style=\"max-width:100%; border-radius:12px; margin:12px 0;\" />\n")
+                }
+                is MarkdownBlock.Details -> {
+                    val summaryHtml = renderHtmlInline(block.summary)
+                    val contentHtml = renderHtmlInline(block.content)
+                    bodyHtmlBuilder.append("<details>\n")
+                    bodyHtmlBuilder.append("  <summary>$summaryHtml</summary>\n")
+                    bodyHtmlBuilder.append("  <div class=\"details-content\">\n    $contentHtml\n  </div>\n")
+                    bodyHtmlBuilder.append("</details>\n")
+                }
+            }
+        }
+        val bodyHtml = bodyHtmlBuilder.toString()
 
         val htmlDoc = """
 <!DOCTYPE html>
@@ -145,6 +222,16 @@ object NoteExporter {
   mark { background: #ffe082; padding: 2px 4px; border-radius: 4px; }
   a { color: #6750a4; text-decoration: underline; }
   footer { margin-top: 24px; text-align: center; font-size: 12px; color: #79747e; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { border: 1px solid #e6e0e9; padding: 8px 12px; text-align: left; }
+  th { background-color: #f3edf7; font-weight: bold; }
+  pre { background-color: #f3edf7; padding: 12px; border-radius: 8px; overflow-x: auto; font-family: monospace; font-size: 14px; }
+  code { background-color: #f3edf7; padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 14px; }
+  blockquote { border-left: 4px solid #6750a4; margin: 16px 0; padding-left: 16px; color: #49454f; font-style: italic; background: #fef7ff; padding-top: 8px; padding-bottom: 8px; border-radius: 0 8px 8px 0; }
+  .alert-title { font-weight: bold; margin-bottom: 4px; color: #21005d; }
+  details { background: #f3edf7; border-radius: 8px; padding: 12px; margin: 16px 0; }
+  summary { font-weight: bold; cursor: pointer; color: #21005d; outline: none; }
+  .details-content { margin-top: 12px; border-top: 1px solid #eaddff; padding-top: 12px; }
 </style>
 </head>
 <body>
