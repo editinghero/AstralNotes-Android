@@ -9,6 +9,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.astralquarks.notes.model.Note
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -73,17 +74,15 @@ class AuthManager(private val context: Context) {
         } catch (e: Exception) {
             // ignore
         }
-        return ""
+        return "173977964592-mqo6ac19i53stper4p2l843bn3220qea.apps.googleusercontent.com"
     }
 
     suspend fun signInWithGoogle(activityContext: Context = context): Result<FirebaseUser> {
         val clientId = getEffectiveWebClientId()
-        if (clientId.isBlank()) {
-            return Result.failure(
-                Exception("Google Sign-In requires an updated google-services.json from Firebase with Google provider enabled.")
-            )
-        }
         return try {
+            val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(clientId)
+                .build()
+
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(clientId)
@@ -91,6 +90,7 @@ class AuthManager(private val context: Context) {
                 .build()
 
             val request = GetCredentialRequest.Builder()
+                .addCredentialOption(signInWithGoogleOption)
                 .addCredentialOption(googleIdOption)
                 .build()
 
@@ -100,11 +100,15 @@ class AuthManager(private val context: Context) {
             )
 
             val credential = result.credential
-            if (credential is CustomCredential &&
+            val idToken = if (credential is CustomCredential &&
                 credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
             ) {
-                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                val idToken = googleIdTokenCredential.idToken
+                GoogleIdTokenCredential.createFrom(credential.data).idToken
+            } else {
+                null
+            }
+
+            if (!idToken.isNullOrBlank()) {
                 val authCredential = GoogleAuthProvider.getCredential(idToken, null)
                 val authResult = auth.signInWithCredential(authCredential).await()
                 val user = authResult.user
@@ -115,7 +119,7 @@ class AuthManager(private val context: Context) {
                     Result.failure(Exception("Failed to get Firebase User"))
                 }
             } else {
-                Result.failure(Exception("Unexpected credential type returned"))
+                Result.failure(Exception("Unexpected credential type: ${credential.javaClass.simpleName}"))
             }
         } catch (e: GetCredentialException) {
             Log.e("AuthManager", "Google Sign-in failed", e)
