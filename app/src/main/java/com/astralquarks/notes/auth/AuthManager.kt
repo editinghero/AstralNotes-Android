@@ -63,14 +63,7 @@ class AuthManager(private val context: Context) {
     val userPhotoUrl: String?
         get() = _currentUser.value?.photoUrl?.toString()
 
-    private val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-
-    var customWebClientId: String
-        get() = prefs.getString("custom_web_client_id", "") ?: ""
-        set(value) = prefs.edit().putString("custom_web_client_id", value).apply()
-
-    fun getEffectiveWebClientId(): String {
-        if (customWebClientId.isNotBlank()) return customWebClientId.trim()
+    private fun getEffectiveWebClientId(): String {
         try {
             val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
             if (resId != 0) {
@@ -83,11 +76,11 @@ class AuthManager(private val context: Context) {
         return ""
     }
 
-    suspend fun signInWithGoogle(webClientId: String? = null): Result<FirebaseUser> {
-        val clientId = webClientId?.ifBlank { null } ?: getEffectiveWebClientId()
+    suspend fun signInWithGoogle(): Result<FirebaseUser> {
+        val clientId = getEffectiveWebClientId()
         if (clientId.isBlank()) {
             return Result.failure(
-                Exception("OAuth Web Client ID not configured. In Firebase Console > Authentication > Google, copy your Web Client ID and paste it in Settings, or re-download google-services.json.")
+                Exception("Google Sign-In requires an updated google-services.json from Firebase with Google provider enabled.")
             )
         }
         return try {

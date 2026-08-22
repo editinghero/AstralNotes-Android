@@ -2,6 +2,7 @@ package com.astralquarks.notes.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,23 +22,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Password
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,9 +48,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,29 +64,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.astralquarks.notes.ai.GeminiManager
 import com.astralquarks.notes.auth.AuthManager
 import com.astralquarks.notes.security.VaultAuthMode
 import com.astralquarks.notes.security.VaultSecurityManager
 import com.astralquarks.notes.ui.components.VaultAuthDialog
-import com.astralquarks.notes.ui.theme.GeminiSparklePink
-import kotlinx.coroutines.launch
-
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.FormatPaint
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.runtime.collectAsState
 import com.astralquarks.notes.ui.theme.AppColorPalette
 import com.astralquarks.notes.ui.theme.AppThemeMode
+import com.astralquarks.notes.ui.theme.GeminiSparklePink
 import com.astralquarks.notes.ui.theme.ThemeSettingsManager
 import com.astralquarks.notes.ui.theme.TonalStyle
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +92,8 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val themeManager = remember { ThemeSettingsManager.getInstance(context) }
     val themeSettings by themeManager.themeSettings.collectAsState()
+    val currentUser by authManager.currentUser.collectAsState()
+    val isSyncing by authManager.isSyncing.collectAsState()
 
     var showPasswordChangeDialog by remember { mutableStateOf(false) }
     var vaultAuthenticatedForChange by remember { mutableStateOf(false) }
@@ -124,7 +114,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings & Appearance",
+                        text = "Settings & Preferences",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 },
@@ -144,6 +134,133 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // TOP SECTION: Firebase Auth & Cloud Firestore Sync
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (authManager.isSignedIn)
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    else
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = if (authManager.isSignedIn)
+                    androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                else
+                    null
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (authManager.isSignedIn && !authManager.userPhotoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = authManager.userPhotoUrl,
+                                contentDescription = "Profile Photo",
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (authManager.isSignedIn) Icons.Default.CloudDone else Icons.Default.CloudSync,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (authManager.isSignedIn)
+                                    (authManager.userDisplayName ?: "Signed In")
+                                else
+                                    "Google Account & Cloud Sync",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = if (authManager.isSignedIn)
+                                    (authManager.userEmail ?: "Synchronized with Firestore")
+                                else
+                                    "Offline-First mode • Sign in to backup notes",
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
+                    }
+
+                    if (authManager.isSignedIn) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            FilledTonalButton(
+                                onClick = onManualSync,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sync Now")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        authManager.signOut()
+                                        Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Sign Out")
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    isSigningIn = true
+                                    val res = authManager.signInWithGoogle()
+                                    isSigningIn = false
+                                    res.onSuccess {
+                                        Toast.makeText(context, "Signed in as ${it.displayName ?: it.email}", Toast.LENGTH_SHORT).show()
+                                    }
+                                    res.onFailure {
+                                        Toast.makeText(context, "${it.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("google_signin_button")
+                        ) {
+                            if (isSigningIn) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sign In with Google")
+                            }
+                        }
+                    }
+                }
+            }
+
             // SECTION 1: Material You & Expressive Theme Customization
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -169,7 +286,7 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "AstralNotes and all note defaults follow your selected Material You expressive dynamic palette.",
+                        text = "AstralNotes and note card defaults follow your selected Material You expressive palette.",
                         style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                     )
 
@@ -403,7 +520,7 @@ fun SettingsScreen(
                 }
             }
 
-            // SECTION 2: Google Gemini AI
+            // SECTION 3: Google Gemini AI
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -494,107 +611,6 @@ fun SettingsScreen(
                 }
             }
 
-            // SECTION 3: Firebase Auth & Cloud Firestore Sync
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Cloud Sync & Firebase Auth",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                    }
-
-                    Text(
-                        text = if (authManager.isSignedIn)
-                            "Signed in as ${authManager.userDisplayName ?: authManager.userEmail}. All notes are encrypted and synchronized with Cloud Firestore."
-                        else
-                            "Currently in Offline-First mode. Notes persist locally on device with Room DB. Sign in to synchronize notes across devices.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    )
-
-                    var customWebClientId by remember { mutableStateOf(authManager.customWebClientId) }
-
-                    OutlinedTextField(
-                        value = customWebClientId,
-                        onValueChange = {
-                            customWebClientId = it
-                            authManager.customWebClientId = it.trim()
-                        },
-                        label = { Text("Firebase Web Client ID") },
-                        placeholder = { Text("173977964592-xxxx.apps.googleusercontent.com") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("settings_web_client_id")
-                    )
-
-                    if (authManager.isSignedIn) {
-                        FilledTonalButton(
-                            onClick = onManualSync,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Trigger Cloud Sync Now")
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    authManager.signOut()
-                                    Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Sign Out")
-                        }
-                    } else {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    isSigningIn = true
-                                    val res = authManager.signInWithGoogle()
-                                    isSigningIn = false
-                                    res.onSuccess {
-                                        Toast.makeText(context, "Signed in as ${it.displayName}", Toast.LENGTH_SHORT).show()
-                                    }
-                                    res.onFailure {
-                                        Toast.makeText(context, "${it.localizedMessage}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("google_signin_button")
-                        ) {
-                            if (isSigningIn) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
-                            } else {
-                                Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Sign In with Google")
-                            }
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -615,23 +631,22 @@ fun SettingsScreen(
             )
         } else {
             VaultAuthDialog(
-                isPasswordSet = false, // force new setup flow
+                isPasswordSet = false,
                 authMode = currentAuthMode,
                 isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
                 onVerifyPassword = { true },
-                onSetPassword = {
-                    vaultSecurityManager.setPassword(it)
-                    Toast.makeText(context, "New vault password set", Toast.LENGTH_SHORT).show()
-                },
-                onTriggerBiometric = onTriggerBiometric,
-                onDismiss = { 
-                    showPasswordChangeDialog = false 
-                    vaultAuthenticatedForChange = false
-                },
-                onSuccess = {
+                onSetPassword = { newPass ->
+                    vaultSecurityManager.setPassword(newPass)
                     showPasswordChangeDialog = false
                     vaultAuthenticatedForChange = false
-                }
+                    Toast.makeText(context, "Vault password saved successfully", Toast.LENGTH_SHORT).show()
+                },
+                onTriggerBiometric = onTriggerBiometric,
+                onDismiss = {
+                    showPasswordChangeDialog = false
+                    vaultAuthenticatedForChange = false
+                },
+                onSuccess = { }
             )
         }
     }
