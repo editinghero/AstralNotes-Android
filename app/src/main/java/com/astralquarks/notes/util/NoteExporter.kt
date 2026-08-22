@@ -76,7 +76,6 @@ object NoteExporter {
             type = "text/markdown"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, note.title.ifBlank { "AstralNotes" })
-            putExtra(Intent.EXTRA_TEXT, fullMd)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(intent, "Share Markdown Note via"))
@@ -262,7 +261,6 @@ object NoteExporter {
             type = "text/html"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, note.title.ifBlank { "AstralNotes Document" })
-            putExtra(Intent.EXTRA_TEXT, htmlDoc)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(intent, "Share HTML Note via"))
