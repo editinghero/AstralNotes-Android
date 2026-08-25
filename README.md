@@ -4,6 +4,8 @@ AstralNotes is a modern, high-performance note-taking and personal knowledge app
 
 ## Screenshot 
 [Instagram](https://www.instagram.com/p/DcVwyKWkj9i/?img_index=4)
+
+[Download It](https://github.com/editinghero/AstralNotes-Android/releases/)
 ## Features
 
 - **Material 3 Expressive Design** - Fluid adaptive layouts, custom pastel note tints, contrast-optimized dark and light modes, and Google Keep-style ease of use.
