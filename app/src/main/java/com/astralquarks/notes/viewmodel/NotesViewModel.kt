@@ -82,6 +82,7 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
                     repository.syncCloudNotes(cloudNotes)
                     QuickNoteWidgetProvider.updateAllWidgets(application)
                 }
+            }
         }
     }
 

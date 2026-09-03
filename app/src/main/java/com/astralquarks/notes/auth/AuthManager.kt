@@ -269,6 +269,20 @@ class AuthManager(private val context: Context) {
                 .document(noteId)
                 .delete()
                 .await()
+
+            try {
+                val sharesSnapshot = firestore.collection("shares")
+                    .whereEqualTo("ownerUid", uid)
+                    .whereEqualTo("noteId", noteId)
+                    .get()
+                    .await()
+                for (doc in sharesSnapshot.documents) {
+                    doc.reference.delete().await()
+                }
+            } catch (se: Exception) {
+                Log.w("AuthManager", "Could not cleanup shares for note: $noteId", se)
+            }
+
             true
         } catch (e: Exception) {
             Log.e("AuthManager", "Error deleting note from Firestore V2", e)

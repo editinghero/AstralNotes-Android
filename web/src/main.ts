@@ -5,7 +5,16 @@ import { getLocalNotes } from './db';
 import { syncEngine } from './sync';
 import { renderMarkdown, toggleChecklistInMarkdown } from './markdown';
 import { getIconSvg } from './icons';
-import { createPasswordProtectedShare, unlockSharedNote } from './share';
+import {
+  createShare,
+  unlockSharedNote,
+  getSharedNoteMeta,
+  revokeShare,
+  listUserShares,
+  exportAsMarkdown,
+  exportAsHtml,
+  exportAsPdf
+} from './share';
 import { vaultManager } from './vault';
 
 const NOTE_COLORS = [
@@ -29,6 +38,7 @@ class AstralNotesApp {
   private isGridView = true;
   private currentUser: User | null = null;
   private activeNote: Note | null = null;
+  private editorMode: 'edit' | 'preview' = 'edit';
 
   private appEl: HTMLElement;
 
@@ -126,7 +136,7 @@ class AstralNotesApp {
           <li class="nav-item ${this.currentDestination === 'VAULT' ? 'active' : ''}" data-dest="VAULT">
             ${getIconSvg(isVaultUnlocked ? 'unlock' : 'lock', 18)}
             <span>Vault ${isVaultUnlocked ? '(Open)' : ''}</span>
-            <span class="nav-item-count" id="count-vault">0</span>
+            <span class="nav-item-count" id="count-vault">${isVaultUnlocked ? '0' : '—'}</span>
           </li>
           <li class="nav-item ${this.currentDestination === 'ARCHIVE' ? 'active' : ''}" data-dest="ARCHIVE">
             ${getIconSvg('archive', 18)}
@@ -137,6 +147,10 @@ class AstralNotesApp {
             ${getIconSvg('trash', 18)}
             <span>Trash</span>
             <span class="nav-item-count" id="count-trash">0</span>
+          </li>
+          <li class="nav-item ${this.currentDestination === 'ANALYTICS' ? 'active' : ''}" data-dest="ANALYTICS">
+            ${getIconSvg('analytics', 18)}
+            <span>Analytics & Shares</span>
           </li>
 
           <div class="nav-section-title">Tags</div>
@@ -351,7 +365,12 @@ class AstralNotesApp {
     });
 
     document.getElementById('toggle-sidebar')?.addEventListener('click', () => {
-      document.getElementById('sidebar')?.classList.toggle('open');
+      const sidebar = document.getElementById('sidebar');
+      if (window.innerWidth <= 820) {
+        sidebar?.classList.toggle('open');
+      } else {
+        sidebar?.classList.toggle('collapsed');
+      }
     });
   }
 
@@ -453,6 +472,11 @@ class AstralNotesApp {
   private renderNotesList(): void {
     const container = document.getElementById('notes-container');
     if (!container) return;
+
+    if (this.currentDestination === 'ANALYTICS') {
+      this.renderAnalyticsView(container);
+      return;
+    }
 
     if (this.currentDestination === 'VAULT' && !vaultManager.isUnlocked()) {
       this.renderVaultAuthScreen(container);
@@ -668,7 +692,7 @@ class AstralNotesApp {
 
     if (countNotes) countNotes.textContent = active.length.toString();
     if (countPinned) countPinned.textContent = pinned.length.toString();
-    if (countVault) countVault.textContent = vault.length.toString();
+    if (countVault) countVault.textContent = vaultManager.isUnlocked() ? vault.length.toString() : '—';
     if (countArchive) countArchive.textContent = archive.length.toString();
     if (countTrash) countTrash.textContent = trash.length.toString();
 
@@ -751,6 +775,7 @@ class AstralNotesApp {
   private openEditor(note?: Note): void {
     const isNew = !note;
     this.activeNote = note ? { ...note } : this.createNoteModel();
+    this.editorMode = note ? 'preview' : 'edit';
     if (isNew && this.currentDestination === 'VAULT') {
       this.activeNote.isLocked = true;
     }
@@ -758,7 +783,7 @@ class AstralNotesApp {
     const mount = document.getElementById('editor-mount')!;
     mount.innerHTML = `
       <div class="editor-modal" id="editor-modal">
-        <div class="editor-surface">
+        <div class="editor-surface ${this.editorMode === 'preview' ? 'mode-preview' : ''}" id="editor-surface">
           <div class="editor-header">
             <input type="text" id="editor-title" class="editor-title-input" placeholder="Note Title..." value="${this.activeNote.title}" />
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -778,10 +803,30 @@ class AstralNotesApp {
                 </div>
               </div>
 
-              <button class="btn btn-secondary" id="editor-vault-btn" title="${this.activeNote.isLocked ? 'Move to Public' : 'Move to Vault'}">
-                ${getIconSvg(this.activeNote.isLocked ? 'unlock' : 'lock', 16)}
-                <span id="editor-vault-text">${this.activeNote.isLocked ? 'In Vault' : 'Normal'}</span>
+              <button type="button" class="btn btn-secondary" id="editor-mode-toggle" title="Toggle Preview / Edit Mode">
+                ${getIconSvg(this.editorMode === 'preview' ? 'edit' : 'eye', 16)}
+                <span id="editor-mode-label">${this.editorMode === 'preview' ? 'Edit' : 'Preview'}</span>
               </button>
+
+              <div style="position: relative;">
+                <button type="button" class="btn btn-secondary" id="editor-export-trigger" title="Export Note" style="display: flex; align-items: center; gap: 6px;">
+                  ${getIconSvg('download', 16)}
+                  <span>Export</span>
+                  ${getIconSvg('chevron-down', 12)}
+                </button>
+                <div id="editor-export-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; background: #22191a; border: 1px solid rgba(240, 120, 138, 0.25); border-radius: 12px; padding: 6px; z-index: 1100; box-shadow: 0 10px 30px rgba(0,0,0,0.6); width: 165px;">
+                  <div class="editor-export-item" data-format="md" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; color: #fff3e0; transition: background 0.15s;">
+                    ${getIconSvg('file', 14)} <span>Markdown (.md)</span>
+                  </div>
+                  <div class="editor-export-item" data-format="html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; color: #fff3e0; transition: background 0.15s;">
+                    ${getIconSvg('code', 14)} <span>HTML (.html)</span>
+                  </div>
+                  <div class="editor-export-item" data-format="pdf" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; color: #fff3e0; transition: background 0.15s;">
+                    ${getIconSvg('printer', 14)} <span>Print / PDF</span>
+                  </div>
+                </div>
+              </div>
+
               <button class="btn btn-secondary" id="editor-share-btn">
                 ${getIconSvg('share', 16)}
                 <span>Share</span>
@@ -810,7 +855,7 @@ class AstralNotesApp {
             <div class="editor-pane-left">
               <textarea id="editor-textarea" class="markdown-textarea" placeholder="Type Markdown here...">${this.activeNote.content}</textarea>
             </div>
-            <div class="editor-pane-right" id="editor-preview">
+            <div class="editor-pane-right markdown-preview" id="editor-preview">
               ${renderMarkdown(this.activeNote.content)}
             </div>
           </div>
@@ -852,17 +897,55 @@ class AstralNotesApp {
       });
     });
 
-    document.addEventListener('click', () => {
-      if (colorMenu) colorMenu.style.display = 'none';
+    const exportTrigger = document.getElementById('editor-export-trigger');
+    const exportMenu = document.getElementById('editor-export-menu');
+
+    exportTrigger?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (exportMenu) {
+        exportMenu.style.display = exportMenu.style.display === 'none' ? 'block' : 'none';
+      }
     });
 
-    document.getElementById('editor-vault-btn')?.addEventListener('click', () => {
-      if (!this.activeNote) return;
-      this.activeNote.isLocked = !this.activeNote.isLocked;
-      const textSpan = document.getElementById('editor-vault-text');
-      if (textSpan) {
-        textSpan.textContent = this.activeNote.isLocked ? 'In Vault' : 'Normal';
+    exportMenu?.querySelectorAll('.editor-export-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!this.activeNote) return;
+        this.activeNote.title = titleInput.value.trim();
+        this.activeNote.content = textarea.value;
+        const fmt = item.getAttribute('data-format');
+        if (fmt === 'md') exportAsMarkdown(this.activeNote);
+        else if (fmt === 'html') exportAsHtml(this.activeNote);
+        else if (fmt === 'pdf') exportAsPdf(this.activeNote);
+        if (exportMenu) exportMenu.style.display = 'none';
+      });
+      item.addEventListener('mouseenter', () => {
+        (item as HTMLElement).style.background = 'rgba(240, 120, 138, 0.2)';
+      });
+      item.addEventListener('mouseleave', () => {
+        (item as HTMLElement).style.background = 'transparent';
+      });
+    });
+
+    document.getElementById('editor-mode-toggle')?.addEventListener('click', () => {
+      this.editorMode = this.editorMode === 'preview' ? 'edit' : 'preview';
+      const surface = document.getElementById('editor-surface');
+      const toggleBtn = document.getElementById('editor-mode-toggle');
+      if (this.editorMode === 'preview') {
+        surface?.classList.add('mode-preview');
+        preview.innerHTML = renderMarkdown(textarea.value);
+        this.bindInteractiveChecklist(preview, textarea);
+      } else {
+        surface?.classList.remove('mode-preview');
       }
+      if (toggleBtn) {
+        toggleBtn.innerHTML = `${getIconSvg(this.editorMode === 'preview' ? 'edit' : 'eye', 16)} <span>${this.editorMode === 'preview' ? 'Edit' : 'Preview'}</span>`;
+      }
+    });
+
+    document.addEventListener('click', () => {
+      if (colorMenu) colorMenu.style.display = 'none';
+      if (exportMenu) exportMenu.style.display = 'none';
     });
 
     textarea.addEventListener('input', () => {
@@ -1087,33 +1170,70 @@ class AstralNotesApp {
     const mount = document.getElementById('modal-mount')!;
     mount.innerHTML = `
       <div class="modal-overlay" id="share-modal">
-        <div class="modal-card">
+        <div class="modal-card" style="max-width: 480px;">
           <div class="modal-header">
-            <h3 class="modal-title">Password-Protected Read-Only Share</h3>
+            <h3 class="modal-title">Share Note</h3>
             <button class="btn-icon" id="modal-close-btn">${getIconSvg('close', 18)}</button>
           </div>
-          <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.6;">
-            Create an encrypted, read-only link for "<strong>${note.title || 'Untitled'}</strong>".
-            Recipients can decrypt and read the note using the password, but cannot edit or alter your content.
+          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.5;">
+            Generate a read-only link or export "<strong>${note.title || 'Untitled'}</strong>".
           </p>
+
           <div id="share-form">
-            <div class="form-group">
-              <label class="form-label">Set Share Password</label>
-              <input type="password" id="share-password" class="form-input" placeholder="Enter password for recipient..." />
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label class="form-label">Password Protection (Optional)</label>
+              <input type="password" id="share-password" class="form-input" placeholder="Leave empty for public link, or set password..." />
+              <span style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                Leave empty for an open public link, or enter a password to encrypt.
+              </span>
             </div>
-            <button class="btn btn-primary" id="generate-share-btn" style="width: 100%; padding: 12px;">
-              ${getIconSvg('lock', 16)}
-              <span>Generate Read-Only Link</span>
+
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label class="form-label">Link Expiration</label>
+              <select id="share-expiry-select" class="form-input" style="background: #22191a; color: #fff3e0;">
+                <option value="never">Never (Does not expire)</option>
+                <option value="1h">1 Hour</option>
+                <option value="1d">1 Day</option>
+                <option value="7d">7 Days</option>
+                <option value="custom">Custom Date & Time</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="custom-expiry-wrap" style="display: none; margin-bottom: 16px;">
+              <label class="form-label">Select Expiration Date & Time</label>
+              <input type="datetime-local" id="share-custom-expiry" class="form-input" style="background: #22191a; color: #fff3e0;" />
+            </div>
+
+            <button class="btn btn-primary" id="generate-share-btn" style="width: 100%; padding: 12px; margin-bottom: 16px;">
+              ${getIconSvg('link', 16)}
+              <span>Create Share Link</span>
             </button>
+
+            <div style="border-top: 1px solid var(--border); padding-top: 14px;">
+              <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 10px;">Quick File Exports</div>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary" id="modal-export-md" style="flex: 1; font-size: 0.8rem; padding: 8px;">
+                  ${getIconSvg('file', 14)} <span>Markdown</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="modal-export-html" style="flex: 1; font-size: 0.8rem; padding: 8px;">
+                  ${getIconSvg('code', 14)} <span>HTML</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="modal-export-pdf" style="flex: 1; font-size: 0.8rem; padding: 8px;">
+                  ${getIconSvg('printer', 14)} <span>PDF</span>
+                </button>
+              </div>
+            </div>
           </div>
+
           <div id="share-result" style="display: none; margin-top: 18px;">
             <div class="share-link-box">
               <input type="text" id="share-url-input" class="share-link-input" readonly />
               <button class="btn-icon" id="copy-share-btn" title="Copy Link">${getIconSvg('copy', 16)}</button>
             </div>
-            <div style="font-size: 0.85rem; color: var(--success); display: flex; align-items: center; gap: 8px; font-weight: 600;">
+            <div id="share-type-badge" style="font-size: 0.82rem; margin-top: 10px; color: var(--primary); font-weight: 600;"></div>
+            <div style="font-size: 0.85rem; color: var(--success); display: flex; align-items: center; gap: 8px; font-weight: 600; margin-top: 8px;">
               ${getIconSvg('check', 16)}
-              <span>Read-only link ready! Share the link and password with the recipient.</span>
+              <span>Share link generated!</span>
             </div>
           </div>
         </div>
@@ -1122,25 +1242,57 @@ class AstralNotesApp {
 
     document.getElementById('modal-close-btn')?.addEventListener('click', () => this.closeModal());
 
+    const expirySelect = document.getElementById('share-expiry-select') as HTMLSelectElement;
+    const customExpiryWrap = document.getElementById('custom-expiry-wrap');
+    expirySelect?.addEventListener('change', () => {
+      if (customExpiryWrap) {
+        customExpiryWrap.style.display = expirySelect.value === 'custom' ? 'block' : 'none';
+      }
+    });
+
+    document.getElementById('modal-export-md')?.addEventListener('click', () => {
+      exportAsMarkdown(note);
+    });
+    document.getElementById('modal-export-html')?.addEventListener('click', () => {
+      exportAsHtml(note);
+    });
+    document.getElementById('modal-export-pdf')?.addEventListener('click', () => {
+      exportAsPdf(note);
+    });
+
     document.getElementById('generate-share-btn')?.addEventListener('click', async () => {
       const passInput = document.getElementById('share-password') as HTMLInputElement;
       const pass = passInput.value.trim();
-      if (!pass) {
-        alert('Please enter a share password.');
-        return;
+
+      let expiresAt: number | null = null;
+      const expChoice = expirySelect.value;
+      if (expChoice === '1h') {
+        expiresAt = Date.now() + 3600 * 1000;
+      } else if (expChoice === '1d') {
+        expiresAt = Date.now() + 24 * 3600 * 1000;
+      } else if (expChoice === '7d') {
+        expiresAt = Date.now() + 7 * 24 * 3600 * 1000;
+      } else if (expChoice === 'custom') {
+        const customInput = document.getElementById('share-custom-expiry') as HTMLInputElement;
+        if (customInput.value) {
+          expiresAt = new Date(customInput.value).getTime();
+        }
       }
 
       const generateBtn = document.getElementById('generate-share-btn') as HTMLButtonElement;
       generateBtn.disabled = true;
-      generateBtn.textContent = 'Encrypting & Generating...';
+      generateBtn.textContent = 'Generating...';
 
       try {
-        const { shareUrl } = await createPasswordProtectedShare(note, pass);
+        const { shareUrl } = await createShare(note, pass, expiresAt);
         document.getElementById('share-form')!.style.display = 'none';
         const resultBox = document.getElementById('share-result')!;
         resultBox.style.display = 'block';
         const urlInput = document.getElementById('share-url-input') as HTMLInputElement;
         urlInput.value = shareUrl;
+
+        const badge = document.getElementById('share-type-badge')!;
+        badge.textContent = pass ? 'Protected: Recipients require password to view.' : 'Public: Anyone with the link can view.';
 
         document.getElementById('copy-share-btn')?.addEventListener('click', () => {
           navigator.clipboard.writeText(shareUrl);
@@ -1149,31 +1301,34 @@ class AstralNotesApp {
       } catch (err) {
         alert(`Failed to create share: ${(err as Error).message}`);
         generateBtn.disabled = false;
-        generateBtn.textContent = 'Generate Read-Only Link';
+        generateBtn.textContent = 'Create Share Link';
       }
     });
   }
 
-  private renderShareReader(shareId: string): void {
+  private async renderShareReader(shareId: string): Promise<void> {
+    this.appEl.style.overflow = 'auto';
     this.appEl.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; width: 100%; background: radial-gradient(circle at 50% 25%, rgba(240, 120, 138, 0.12) 0%, transparent 60%), var(--bg-dark);">
+      <div class="share-reader-container">
         <div class="modal-card" id="reader-auth-card" style="max-width: 440px;">
           <div class="brand-icon" style="margin: 0 auto 16px; width: 50px; height: 50px;">${getIconSvg('lock', 24)}</div>
-          <h2 style="text-align: center; margin-bottom: 8px; font-size: 1.4rem; font-family: var(--font-display);">Protected Shared Note</h2>
-          <p style="text-align: center; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 22px; line-height: 1.6;">
-            This note is encrypted and read-only. Enter the shared password to unlock and read.
+          <h2 style="text-align: center; margin-bottom: 8px; font-size: 1.4rem; font-family: var(--font-display);">Shared Note</h2>
+          <p id="reader-subtitle" style="text-align: center; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 22px; line-height: 1.6;">
+            Loading note...
           </p>
-          <div class="form-group">
-            <input type="password" id="reader-password" class="form-input" placeholder="Enter share password..." />
+          <div id="reader-pass-form" style="display: none;">
+            <div class="form-group">
+              <input type="password" id="reader-password" class="form-input" placeholder="Enter share password..." />
+            </div>
+            <button class="btn btn-primary" id="reader-unlock-btn" style="width: 100%; padding: 12px;">
+              ${getIconSvg('unlock', 16)}
+              <span>Unlock Note</span>
+            </button>
           </div>
-          <button class="btn btn-primary" id="reader-unlock-btn" style="width: 100%; padding: 12px;">
-            ${getIconSvg('unlock', 16)}
-            <span>Unlock Note</span>
-          </button>
           <div id="reader-error" style="color: var(--danger); font-size: 0.88rem; margin-top: 14px; text-align: center; font-weight: 600;"></div>
         </div>
 
-        <div id="reader-content-card" style="display: none; width: 100%; max-width: 820px; background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-glass);">
+        <div id="reader-content-card" style="display: none; width: 100%; max-width: 820px; background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-glass); margin-bottom: 40px;">
           <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
             <div>
               <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); background: var(--color-accent-subtle); padding: 3px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border-active);">Read-Only</span>
@@ -1190,37 +1345,207 @@ class AstralNotesApp {
               </a>
             </div>
           </div>
-          <div id="reader-body" style="line-height: 1.8;"></div>
+          <div id="reader-body" class="markdown-preview" style="line-height: 1.8;"></div>
         </div>
       </div>
     `;
 
-    document.getElementById('reader-unlock-btn')?.addEventListener('click', async () => {
-      const pass = (document.getElementById('reader-password') as HTMLInputElement).value;
-      const errEl = document.getElementById('reader-error')!;
-      errEl.textContent = '';
+    const authCard = document.getElementById('reader-auth-card')!;
+    const subtitle = document.getElementById('reader-subtitle')!;
+    const passForm = document.getElementById('reader-pass-form')!;
+    const errEl = document.getElementById('reader-error')!;
+    const contentCard = document.getElementById('reader-content-card')!;
+    const readerTitle = document.getElementById('reader-title')!;
+    const readerBody = document.getElementById('reader-body')!;
 
-      try {
-        const decrypted = await unlockSharedNote(shareId, pass);
-        document.getElementById('reader-auth-card')!.style.display = 'none';
-        const contentCard = document.getElementById('reader-content-card')!;
+    try {
+      const meta = await getSharedNoteMeta(shareId);
+
+      if (meta.isDeleted) {
+        subtitle.textContent = 'This shared note has been deleted by its author.';
+        return;
+      }
+
+      if (meta.isExpired) {
+        subtitle.textContent = 'This shared link has expired.';
+        return;
+      }
+
+      if (!meta.isPasswordProtected) {
+        const decrypted = await unlockSharedNote(shareId);
+        authCard.style.display = 'none';
         contentCard.style.display = 'block';
-        document.getElementById('reader-title')!.textContent = decrypted.title || 'Untitled Note';
-        
-        const rendered = renderMarkdown(decrypted.content);
-        const readerBody = document.getElementById('reader-body')!;
-        readerBody.innerHTML = rendered;
-        readerBody.querySelectorAll('.task-checkbox').forEach((cb) => {
+        readerTitle.textContent = decrypted.title || 'Untitled Note';
+        readerBody.innerHTML = renderMarkdown(decrypted.content);
+        readerBody.querySelectorAll('.task-checkbox').forEach(cb => {
           (cb as HTMLInputElement).disabled = true;
         });
-
         document.getElementById('reader-copy-btn')?.addEventListener('click', () => {
           navigator.clipboard.writeText(`${decrypted.title}\n\n${decrypted.content}`);
           alert('Note copied to clipboard!');
         });
-      } catch (err) {
-        errEl.textContent = (err as Error).message;
+        return;
       }
+
+      subtitle.textContent = 'This note is password-protected. Enter password to unlock and read.';
+      passForm.style.display = 'block';
+
+      document.getElementById('reader-unlock-btn')?.addEventListener('click', async () => {
+        const pass = (document.getElementById('reader-password') as HTMLInputElement).value;
+        errEl.textContent = '';
+        try {
+          const decrypted = await unlockSharedNote(shareId, pass);
+          authCard.style.display = 'none';
+          contentCard.style.display = 'block';
+          readerTitle.textContent = decrypted.title || 'Untitled Note';
+          readerBody.innerHTML = renderMarkdown(decrypted.content);
+          readerBody.querySelectorAll('.task-checkbox').forEach(cb => {
+            (cb as HTMLInputElement).disabled = true;
+          });
+          document.getElementById('reader-copy-btn')?.addEventListener('click', () => {
+            navigator.clipboard.writeText(`${decrypted.title}\n\n${decrypted.content}`);
+            alert('Note copied to clipboard!');
+          });
+        } catch (err) {
+          errEl.textContent = (err as Error).message;
+        }
+      });
+    } catch (err) {
+      subtitle.textContent = (err as Error).message;
+    }
+  }
+
+  private async renderAnalyticsView(container: HTMLElement): Promise<void> {
+    const active = this.notes.filter(n => !n.isTrash && !n.isDeleted && !n.isArchived && !n.isLocked);
+    const pinned = this.notes.filter(n => n.isPinned && !n.isTrash && !n.isDeleted && !n.isArchived && !n.isLocked);
+    const vault = this.notes.filter(n => n.isLocked && !n.isTrash && !n.isDeleted);
+    const archive = this.notes.filter(n => n.isArchived && !n.isTrash && !n.isDeleted);
+    const trash = this.notes.filter(n => n.isTrash && !n.isDeleted);
+
+    let totalWords = 0;
+    this.notes.forEach(n => {
+      if (!n.isTrash && !n.isDeleted) {
+        totalWords += n.content.trim().split(/\s+/).filter(Boolean).length;
+      }
+    });
+
+    const allTags = new Set<string>();
+    this.notes.forEach(n => {
+      if (!n.isTrash && !n.isDeleted) {
+        n.tags.forEach(t => allTags.add(t));
+      }
+    });
+
+    const shares = await listUserShares();
+
+    container.innerHTML = `
+      <div class="analytics-view">
+        <h2 style="font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 24px;">Analytics & Shared Links</h2>
+
+        <div class="analytics-grid">
+          <div class="analytics-card">
+            <span class="analytics-card-val">${active.length}</span>
+            <span class="analytics-card-label">Active Notes</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${totalWords.toLocaleString()}</span>
+            <span class="analytics-card-label">Total Words Written</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${vaultManager.isUnlocked() ? vault.length : '—'}</span>
+            <span class="analytics-card-label">Vault Notes ${vaultManager.isUnlocked() ? '(Unlocked)' : '(Locked)'}</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${pinned.length}</span>
+            <span class="analytics-card-label">Pinned Notes</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${allTags.size}</span>
+            <span class="analytics-card-label">Unique Tags</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${archive.length}</span>
+            <span class="analytics-card-label">Archived Notes</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${trash.length}</span>
+            <span class="analytics-card-label">Trash Notes</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-card-val">${shares.length}</span>
+            <span class="analytics-card-label">Active Shared Links</span>
+          </div>
+        </div>
+
+        <div class="shares-table-container">
+          <div class="shares-table-header">
+            <h3 style="font-size: 1.1rem; font-family: var(--font-display);">Shared Links Management</h3>
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">${shares.length} total links</span>
+          </div>
+
+          <div id="shares-list">
+            ${shares.length === 0 ? `
+              <div style="padding: 32px; text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
+                No active shared links. Use the Share button on any note to generate web links.
+              </div>
+            ` : shares.map(s => {
+              const isExpired = Boolean(s.expiresAt && Date.now() > s.expiresAt);
+              const expiryStr = s.expiresAt
+                ? (isExpired ? 'Expired' : `Expires ${new Date(s.expiresAt).toLocaleDateString()} ${new Date(s.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+                : 'Never expires';
+              const base = `${window.location.origin}${window.location.pathname}`;
+              const shareUrl = `${base}#/share/${s.shareId}`;
+              return `
+                <div class="share-item-row" data-share-id="${s.shareId}">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 700; color: var(--text-ink); font-size: 0.95rem; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      ${s.title}
+                    </div>
+                    <div style="display: flex; gap: 12px; font-size: 0.78rem; color: var(--text-secondary); align-items: center;">
+                      <span style="color: ${s.isPasswordProtected ? 'var(--primary)' : 'var(--accent)'}; font-weight: 600;">
+                        ${s.isPasswordProtected ? 'Password Protected' : 'Public'}
+                      </span>
+                      <span>Created: ${new Date(s.createdAt).toLocaleDateString()}</span>
+                      <span style="color: ${isExpired ? 'var(--danger)' : 'inherit'}; font-weight: ${isExpired ? '700' : 'normal'};">
+                        ${expiryStr}
+                      </span>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary share-copy-btn" data-url="${shareUrl}" style="padding: 6px 12px; font-size: 0.8rem;">
+                      ${getIconSvg('copy', 14)} <span>Copy</span>
+                    </button>
+                    <button class="btn-icon share-revoke-btn" data-id="${s.shareId}" title="Revoke Link" style="color: var(--danger);">
+                      ${getIconSvg('trash', 16)}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.querySelectorAll('.share-copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.getAttribute('data-url');
+        if (url) {
+          navigator.clipboard.writeText(url);
+          alert('Share link copied to clipboard!');
+        }
+      });
+    });
+
+    container.querySelectorAll('.share-revoke-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const shareId = btn.getAttribute('data-id');
+        if (!shareId) return;
+        if (confirm('Revoke this share link? Anyone with this link will no longer be able to access the note.')) {
+          await revokeShare(shareId);
+          this.renderAnalyticsView(container);
+        }
+      });
     });
   }
 

@@ -1,6 +1,6 @@
 export type SyncStatus = 'SYNCED' | 'SYNCING' | 'OFFLINE_PENDING' | 'ERROR';
 
-export type DrawerDestination = 'NOTES' | 'PINNED' | 'VAULT' | 'ARCHIVE' | 'TRASH';
+export type DrawerDestination = 'NOTES' | 'PINNED' | 'VAULT' | 'ARCHIVE' | 'TRASH' | 'ANALYTICS';
 
 export interface Note {
   id: string;
@@ -57,4 +57,5 @@ export interface ShareRecord {
   encryptedPayload: string;
   createdAt: number;
   expiresAt: number | null;
+  isPasswordProtected: boolean;
 }

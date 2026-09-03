@@ -35,7 +35,12 @@ import {
   ListFilter,
   ShieldAlert,
   ArrowLeft,
-  ChevronDown
+  ChevronDown,
+  BarChart3,
+  Download,
+  Printer,
+  Clock,
+  Link2
 } from 'lucide';
 
 const ICONS: Record<string, unknown> = {
@@ -74,7 +79,12 @@ const ICONS: Record<string, unknown> = {
   'list-view': ListFilter,
   shield: ShieldAlert,
   back: ArrowLeft,
-  'chevron-down': ChevronDown
+  'chevron-down': ChevronDown,
+  analytics: BarChart3,
+  download: Download,
+  printer: Printer,
+  clock: Clock,
+  link: Link2
 };
 
 export function getIconSvg(name: string, size = 18, className = ''): string {

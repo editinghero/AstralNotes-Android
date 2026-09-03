@@ -12,6 +12,7 @@ import type { Note, SyncStatus, EncryptedNotePayload } from './types';
 import { deriveKey, encryptNotePayload, decryptNotePayload, base64ToBuffer, bufferToBase64, generateSalt } from './crypto';
 import { saveLocalNote, saveLocalNotesBatch, deleteLocalNote, getMetaValue, setMetaValue } from './db';
 import { vaultManager } from './vault';
+import { deleteSharesForNote } from './share';
 
 type StatusListener = (status: SyncStatus) => void;
 type NotesListener = (notes: Note[]) => void;
@@ -325,6 +326,7 @@ class SyncEngine {
       this.setStatus('SYNCING');
       const docRef = doc(db, 'user', user.uid, 'notes', noteId);
       await deleteDoc(docRef);
+      await deleteSharesForNote(noteId);
       this.setStatus('SYNCED');
     } catch (e) {
       console.error('Failed to delete note in Firestore V2:', e);
