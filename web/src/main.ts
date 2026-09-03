@@ -656,11 +656,6 @@ class AstralNotesApp {
       day: 'numeric'
     });
 
-    const cleanSnippet = note.content
-      .replace(/#+\s*/g, '')
-      .replace(/!\[.*?\]\(.*?\)/g, '[Image]')
-      .slice(0, 180);
-
     const borderStyle = note.colorHex && note.colorHex !== '#DEFAULT'
       ? `style="border-left: 4px solid ${note.colorHex};"`
       : '';
@@ -673,7 +668,7 @@ class AstralNotesApp {
             ${getIconSvg('pin', 16)}
           </button>
         </div>
-        <p class="note-card-snippet">${cleanSnippet || 'Empty note...'}</p>
+        <div class="note-card-snippet markdown-preview">${renderMarkdown(note.content) || 'Empty note...'}</div>
         ${note.tags.length > 0 ? `
           <div class="note-card-tags">
             ${note.tags.map(t => `<span class="tag-chip">#${t}</span>`).join('')}

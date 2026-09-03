@@ -543,6 +543,23 @@ body {
   flex: 1;
 }
 
+.note-card-snippet.markdown-preview {
+  max-height: 150px;
+  display: block;
+}
+
+.note-card-snippet.markdown-preview > * {
+  margin-bottom: 0.5rem;
+}
+
+.note-card-snippet.markdown-preview > *:last-child {
+  margin-bottom: 0;
+}
+
+.note-card-snippet.markdown-preview p {
+  margin: 0;
+}
+
 .note-card-tags {
   display: flex;
   flex-wrap: wrap;

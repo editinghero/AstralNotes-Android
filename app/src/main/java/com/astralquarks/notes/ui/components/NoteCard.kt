@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.astralquarks.notes.model.Note
 import com.astralquarks.notes.model.NoteColorPalette
+import com.astralquarks.notes.markdown.MarkdownRenderer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -120,13 +123,6 @@ fun NoteCard(
         }
     }
 
-    val plainContentPreview = remember(note.content) {
-        if (checklistItems.isNotEmpty()) ""
-        else {
-            val sample = if (note.content.length > 250) note.content.take(250) else note.content
-            sample.replace(MD_FORMAT_REGEX, " ").trim()
-        }
-    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -241,17 +237,15 @@ fun NoteCard(
                             }
                         }
                     }
-                } else if (plainContentPreview.isNotBlank()) {
+                } else if (note.content.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = plainContentPreview,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = secondaryTextColor,
-                            lineHeight = 20.sp
-                        ),
-                        maxLines = 5,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Box(modifier = Modifier.heightIn(max = 100.dp).clipToBounds()) {
+                        MarkdownRenderer(
+                            markdown = note.content,
+                            textColor = secondaryTextColor,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 // Tags flow row
