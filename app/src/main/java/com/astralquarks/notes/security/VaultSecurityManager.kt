@@ -196,6 +196,14 @@ class VaultSecurityManager(private val context: Context) {
         }
     }
 
+    suspend fun verifyPassword(password: String): Result<Boolean> = unlockWithPassword(password)
+
+    suspend fun setPassword(password: String): Result<Unit> = setupNewVault(password)
+
+    fun unlockVault() {
+        _isVaultUnlocked.value = true
+    }
+
     fun lockVault() {
         inMemoryVaultKey = null
         _isVaultUnlocked.value = false

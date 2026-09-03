@@ -68,7 +68,7 @@ fun VaultAuthDialog(
     var isProcessing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    val handleConfirm = {
+    val handleConfirm: () -> Unit = {
         if (isPasswordSet) {
             if (password.isBlank()) {
                 errorMessage = "Please enter your vault password."
@@ -223,7 +223,7 @@ fun VaultAuthDialog(
         },
         confirmButton = {
             Button(
-                onClick = handleConfirm,
+                onClick = { handleConfirm() },
                 enabled = !isProcessing,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(

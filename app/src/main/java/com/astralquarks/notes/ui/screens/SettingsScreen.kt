@@ -622,7 +622,7 @@ fun SettingsScreen(
                 authMode = currentAuthMode,
                 isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
                 onVerifyPassword = { vaultSecurityManager.verifyPassword(it) },
-                onSetPassword = { },
+                onSetPassword = { Result.success(Unit) },
                 onTriggerBiometric = onTriggerBiometric,
                 onDismiss = { showPasswordChangeDialog = false },
                 onSuccess = {
@@ -634,12 +634,15 @@ fun SettingsScreen(
                 isPasswordSet = false,
                 authMode = currentAuthMode,
                 isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
-                onVerifyPassword = { true },
+                onVerifyPassword = { Result.success(true) },
                 onSetPassword = { newPass ->
-                    vaultSecurityManager.setPassword(newPass)
-                    showPasswordChangeDialog = false
-                    vaultAuthenticatedForChange = false
-                    Toast.makeText(context, "Vault password saved successfully", Toast.LENGTH_SHORT).show()
+                    val res = vaultSecurityManager.setPassword(newPass)
+                    if (res.isSuccess) {
+                        showPasswordChangeDialog = false
+                        vaultAuthenticatedForChange = false
+                        Toast.makeText(context, "Vault password saved successfully", Toast.LENGTH_SHORT).show()
+                    }
+                    res
                 },
                 onTriggerBiometric = onTriggerBiometric,
                 onDismiss = {
