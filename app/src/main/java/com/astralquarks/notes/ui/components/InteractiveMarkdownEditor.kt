@@ -6,6 +6,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -83,6 +90,7 @@ import coil.compose.AsyncImage
  * Interactive Live Markdown Editor with immediate real-time synchronization,
  * auto-list continuation, instant in-place checklist item toggling, and rich preview.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InteractiveMarkdownEditor(
     value: TextFieldValue,
@@ -93,6 +101,9 @@ fun InteractiveMarkdownEditor(
 ) {
     val context = LocalContext.current
     var showInteractiveChecklistOverlay by remember { mutableStateOf(false) }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+
 
     // Check if the current note has checklist items
     val hasChecklistItems = remember(value.text) {
@@ -315,6 +326,15 @@ fun InteractiveMarkdownEditor(
             }
         }
 
+                var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+
+        LaunchedEffect(value.selection) {
+            val cursorRect = textLayoutResult?.getCursorRect(value.selection.start)
+            if (cursorRect != null) {
+                bringIntoViewRequester.bringIntoView(cursorRect)
+            }
+        }
+
         // Live Markdown Input Field with Instant Synchronous Save & Auto-Continuations
         BasicTextField(
             value = value,
@@ -322,6 +342,9 @@ fun InteractiveMarkdownEditor(
                 // Apply auto list continuation and immediately notify parent
                 val handled = MarkdownAutoListHelper.handleTextChange(value, incoming)
                 onValueChange(handled)
+            },
+            onTextLayout = { result ->
+                textLayoutResult = result
             },
             textStyle = TextStyle(
                 fontSize = 16.sp,
@@ -350,7 +373,9 @@ fun InteractiveMarkdownEditor(
                     innerTextField()
                 }
             },
+
             modifier = Modifier
+                .bringIntoViewRequester(bringIntoViewRequester)
                 .fillMaxWidth()
                 .testTag("note_content_input")
         )

@@ -63,6 +63,11 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -213,6 +218,9 @@ fun NoteEditScreen(
     val textColor = remember(backgroundColor) { NoteColorPalette.getNoteTextColor(backgroundColor) }
     val secondaryTextColor = remember(backgroundColor) { NoteColorPalette.getNoteSecondaryTextColor(backgroundColor) }
 
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
     Scaffold(
         modifier = modifier
             .fillMaxSize()
@@ -350,6 +358,38 @@ fun NoteEditScreen(
                 )
             )
         },
+        floatingActionButton = {
+            if (isRawMode) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(bottom = 60.dp) // padding above the toolbar
+                ) {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(0)
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Scroll to Top")
+                    }
+                    SmallFloatingActionButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(scrollState.maxValue)
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to Bottom")
+                    }
+                }
+            }
+        },
         bottomBar = {
             if (isRawMode) {
                 Box(
@@ -390,7 +430,7 @@ fun NoteEditScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Note Title Input
