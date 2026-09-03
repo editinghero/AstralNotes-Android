@@ -27,6 +27,9 @@ data class Note(
     val deviceId: String = "",
     val isDeleted: Boolean = false
 ) {
+    @androidx.room.Ignore
+    var isDecryptionFailed: Boolean = false
+
     /**
      * Serializes note to V2 Firestore schema.
      * When secretKey is provided, title, content, tags, and imageUrls are encrypted.
@@ -100,21 +103,30 @@ data class Note(
             var tags = (map["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             var imageUrls = (map["imageUrls"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
 
-            if (isEncrypted && !encryptedData.isNullOrBlank() && !iv.isNullOrBlank() && secretKey != null) {
-                try {
-                    val decrypted = CryptoEngine.decryptNotePayload(encryptedData, iv, secretKey)
-                    title = decrypted.title
-                    content = decrypted.content
-                    tags = decrypted.tags
-                    imageUrls = decrypted.imageUrls
-                } catch (e: Exception) {
-                    // If decryption key does not match, retain placeholder without crashing
+            var isDecryptionFailed = false
+
+            if (isEncrypted && !encryptedData.isNullOrBlank() && !iv.isNullOrBlank()) {
+                if (secretKey != null) {
+                    try {
+                        val decrypted = CryptoEngine.decryptNotePayload(encryptedData, iv, secretKey)
+                        title = decrypted.title
+                        content = decrypted.content
+                        tags = decrypted.tags
+                        imageUrls = decrypted.imageUrls
+                    } catch (e: Exception) {
+                        // If decryption key does not match, retain placeholder without crashing
+                        isDecryptionFailed = true
+                        title = "[Encrypted Note]"
+                        content = "Unable to decrypt content with current vault key."
+                    }
+                } else {
+                    isDecryptionFailed = true
                     title = "[Encrypted Note]"
                     content = "Unable to decrypt content with current vault key."
                 }
             }
 
-            return Note(
+            val note = Note(
                 id = id,
                 title = title,
                 content = content,
@@ -133,6 +145,8 @@ data class Note(
                 deviceId = deviceId,
                 isDeleted = isDeleted
             )
+            note.isDecryptionFailed = isDecryptionFailed
+            return note
         }
 
         fun fromFirestoreMap(map: Map<String, Any?>): Note = fromFirestoreV2Map(map, null)

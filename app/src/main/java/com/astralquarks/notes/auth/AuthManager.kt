@@ -39,6 +39,8 @@ enum class SyncStatus {
 
 class AuthManager(private val context: Context) {
 
+    lateinit var vaultSecurityManager: com.astralquarks.notes.security.VaultSecurityManager
+
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val credentialManager = CredentialManager.create(context)
@@ -79,21 +81,13 @@ class AuthManager(private val context: Context) {
         get() = _currentUser.value?.photoUrl?.toString()
 
     /**
-     * Derives or retrieves the 256-bit AES master encryption key for this user.
-     * Compatible with Web Crypto API standards using PBKDF2WithHmacSHA256.
+     * Retrieves the 256-bit AES master encryption key for this user from VaultSecurityManager.
      */
     fun getEncryptionKey(): SecretKey? {
-        val uid = userId ?: return null
-        val storedPass = vaultPrefs.getString("vault_key_$uid", null) ?: uid
-        val saltStr = vaultPrefs.getString("vault_salt_$uid", null)
-        val salt = if (!saltStr.isNullOrBlank()) {
-            Base64.decode(saltStr, Base64.NO_WRAP)
-        } else {
-            val newSalt = CryptoEngine.generateSalt()
-            vaultPrefs.edit().putString("vault_salt_$uid", Base64.encodeToString(newSalt, Base64.NO_WRAP)).apply()
-            newSalt
+        if (::vaultSecurityManager.isInitialized) {
+            return vaultSecurityManager.getVaultKey()
         }
-        return CryptoEngine.deriveKey(storedPass, salt)
+        return null
     }
 
     private fun getEffectiveWebClientId(): String {
@@ -294,7 +288,7 @@ class AuthManager(private val context: Context) {
      * Observes real-time note updates from new V2 Firestore path: user/{uid}/notes
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeFirestoreNotes(): Flow<List<Note>> = currentUser.flatMapLatest { user ->
+    fun observeFirestoreNotes(): Flow<List<Note>> = kotlinx.coroutines.flow.combine(currentUser, if (::vaultSecurityManager.isInitialized) vaultSecurityManager.isVaultUnlocked else flowOf(false)) { user, _ -> user }.flatMapLatest { user ->
         val uid = user?.uid
         if (uid == null) {
             flowOf(emptyList())

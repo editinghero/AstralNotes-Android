@@ -63,6 +63,8 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
     val currentDestination: StateFlow<DrawerDestination> = _currentDestination.asStateFlow()
 
     init {
+        authManager.vaultSecurityManager = vaultSecurityManager
+
         // Observe user sign-in state to automatically trigger full bidirectional sync
         viewModelScope.launch {
             authManager.currentUser.collect { user ->
