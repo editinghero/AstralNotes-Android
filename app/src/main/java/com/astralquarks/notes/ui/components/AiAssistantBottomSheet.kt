@@ -713,7 +713,7 @@ fun AiAssistantBottomSheet(
                                 }
                             }
 
-                            items(chatMessages) { msg ->
+                            items(chatMessages, key = { msg -> "${msg.timestamp}_${msg.role}" }) { msg ->
                                 val isUser = msg.role == "user"
                                 val parsed = remember(msg.content) {
                                     if (!isUser) GeminiActionParser.parse(msg.content) else ParsedAiMessage(msg.content, null)
@@ -1138,7 +1138,7 @@ fun AiAssistantBottomSheet(
                                     .weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                items(filteredHistory) { item ->
+                                items(filteredHistory, key = { item -> item.id }) { item ->
                                     Card(
                                         shape = RoundedCornerShape(16.dp),
                                         colors = CardDefaults.cardColors(
@@ -1368,7 +1368,7 @@ fun AiAssistantBottomSheet(
                     )
 
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(allNotes) { n ->
+                        items(allNotes, key = { n -> n.id }) { n ->
                             val isTargeted = targetedNoteIds.contains(n.id)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
