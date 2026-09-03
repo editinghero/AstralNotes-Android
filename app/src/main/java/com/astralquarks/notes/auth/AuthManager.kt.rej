@@ -1,0 +1,24 @@
+--- app/src/main/java/com/astralquarks/notes/auth/AuthManager.kt	2024-05-18 20:00:00.000000000 -0400
++++ app/src/main/java/com/astralquarks/notes/auth/AuthManager.kt	2024-05-18 20:00:00.000000000 -0400
+@@ -82,15 +82,20 @@
+      * Derives or retrieves the 256-bit AES master encryption key for this user.
+      * Compatible with Web Crypto API standards using PBKDF2WithHmacSHA256.
+      */
++    private var cachedKey: SecretKey? = null
++
+     fun getEncryptionKey(): SecretKey? {
+         val uid = userId ?: return null
++        if (cachedKey != null) return cachedKey
++
+         val storedPass = vaultPrefs.getString("vault_key_$uid", null) ?: uid
+         val saltStr = vaultPrefs.getString("vault_salt_$uid", null)
+         val salt = if (!saltStr.isNullOrBlank()) {
+             Base64.decode(saltStr, Base64.NO_WRAP)
+         } else {
+             val newSalt = CryptoEngine.generateSalt()
+             vaultPrefs.edit().putString("vault_salt_$uid", Base64.encodeToString(newSalt, Base64.NO_WRAP)).apply()
+             newSalt
+         }
+-        return CryptoEngine.deriveKey(storedPass, salt)
++        cachedKey = CryptoEngine.deriveKey(storedPass, salt)
++        return cachedKey
