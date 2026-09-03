@@ -37,12 +37,14 @@ import com.astralquarks.notes.model.Note
 import com.astralquarks.notes.ui.components.AiAssistantBottomSheet
 import com.astralquarks.notes.ui.components.DrawerDestination
 import com.astralquarks.notes.ui.components.ExpressiveDrawerContent
+import android.net.Uri
 import com.astralquarks.notes.ui.screens.ArchiveScreen
 import com.astralquarks.notes.ui.screens.DashboardScreen
 import com.astralquarks.notes.ui.screens.HomeScreen
 import com.astralquarks.notes.ui.screens.LockedVaultScreen
 import com.astralquarks.notes.ui.screens.NoteEditScreen
 import com.astralquarks.notes.ui.screens.SettingsScreen
+import com.astralquarks.notes.ui.screens.SignInGateScreen
 import com.astralquarks.notes.ui.screens.TagsScreen
 import com.astralquarks.notes.ui.screens.TrashScreen
 import com.astralquarks.notes.ui.theme.MyApplicationTheme
@@ -141,7 +143,20 @@ fun MainAppContent(
         pendingIntentFlow.value = null
     }
 
-    // Intercept hardware/system back button
+    if (currentUser == null) {
+        SignInGateScreen(
+            onSignIn = {
+                scope.launch {
+                    val res = viewModel.authManager.signInWithGoogle(activity)
+                    if (res.isFailure) {
+                        Toast.makeText(activity, res.exceptionOrNull()?.localizedMessage ?: "Sign in failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+        return
+    }
+
     BackHandler(enabled = drawerState.isOpen || currentScreen !is Screen.Home) {
         if (drawerState.isOpen) {
             scope.launch { drawerState.close() }
@@ -174,7 +189,13 @@ fun MainAppContent(
                 lockedCount = lockedNotes.size,
                 activeNotesCount = activeNotes.size,
                 userDisplayName = currentUser?.displayName,
-                isSignedIn = currentUser != null
+                isSignedIn = currentUser != null,
+                onOpenWebApp = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://astralnotesweb.pages.dev"))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                    scope.launch { drawerState.close() }
+                }
             )
         }
     ) {

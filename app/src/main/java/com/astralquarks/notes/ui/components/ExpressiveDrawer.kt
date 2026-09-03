@@ -72,6 +72,7 @@ fun ExpressiveDrawerContent(
     activeNotesCount: Int,
     userDisplayName: String?,
     isSignedIn: Boolean,
+    onOpenWebApp: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -222,6 +223,14 @@ fun ExpressiveDrawerContent(
                 isSelected = currentDestination == DrawerDestination.SETTINGS,
                 onClick = { onSelectDestination(DrawerDestination.SETTINGS) },
                 testTag = "drawer_nav_settings"
+            )
+
+            DrawerNavItem(
+                label = "AstralNotes Web",
+                icon = Icons.Default.CloudDone,
+                isSelected = false,
+                onClick = onOpenWebApp,
+                testTag = "drawer_nav_web_app"
             )
         }
     }

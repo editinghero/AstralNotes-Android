@@ -45,9 +45,6 @@ class AstralNotesApp {
       return;
     }
 
-    this.notes = await getLocalNotes();
-    this.render();
-
     syncEngine.onStatusChange((status) => {
       this.updateSyncUI(status);
     });
@@ -65,19 +62,22 @@ class AstralNotesApp {
     onAuthStateChanged(auth, async (user) => {
       this.currentUser = user;
       vaultManager.lockVault();
-      this.renderUserSection();
+
       if (user) {
+        this.notes = await getLocalNotes();
+        this.render();
         await syncEngine.startRealtimeSync();
       } else {
+        this.notes = [];
         syncEngine.stopRealtimeSync();
-        syncEngine.setStatus('OFFLINE_PENDING');
+        this.render();
       }
     });
 
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        this.openEditor();
+        if (this.currentUser) this.openEditor();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         const searchInput = document.getElementById('search-input') as HTMLInputElement | null;
@@ -95,6 +95,11 @@ class AstralNotesApp {
   }
 
   private render(): void {
+    if (!this.currentUser) {
+      this.renderSignInGate();
+      return;
+    }
+
     const isVaultSection = this.currentDestination === 'VAULT';
     const isVaultUnlocked = vaultManager.isUnlocked();
 
@@ -225,6 +230,44 @@ class AstralNotesApp {
     this.renderNavCounts();
   }
 
+  private renderSignInGate(): void {
+    this.appEl.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; width: 100vw; padding: 24px; background: radial-gradient(circle at 50% 30%, rgba(240, 120, 138, 0.12) 0%, transparent 60%), var(--bg-dark);">
+        <div class="modal-card" style="max-width: 440px; text-align: center; border: 1px solid var(--border-active); box-shadow: var(--shadow-glass), var(--shadow-glow); padding: 36px 32px;">
+          <div class="brand-icon" style="margin: 0 auto 20px; width: 56px; height: 56px; border-radius: var(--radius-lg);">
+            ${getIconSvg('cloud', 30)}
+          </div>
+          <h1 style="font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; color: var(--text-ink); margin-bottom: 10px;">
+            Astral Notes
+          </h1>
+          <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.6;">
+            Sign in with your Google account to synchronize your notes and private locked vault across Android and Web.
+          </p>
+          <button class="btn btn-primary" id="gate-signin-btn" style="width: 100%; padding: 13px 20px; font-size: 0.95rem;">
+            ${getIconSvg('log-in', 18)}
+            <span>Sign In with Google</span>
+          </button>
+          <div id="gate-signin-error" style="color: var(--danger); font-size: 0.85rem; margin-top: 14px; font-weight: 600;"></div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('gate-signin-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('gate-signin-btn') as HTMLButtonElement;
+      const errEl = document.getElementById('gate-signin-error')!;
+      errEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (err) {
+        errEl.textContent = (err as Error).message || 'Sign in failed. Please try again.';
+        btn.disabled = false;
+        btn.innerHTML = `${getIconSvg('log-in', 18)} <span>Sign In with Google</span>`;
+      }
+    });
+  }
+
   private bindEvents(): void {
     this.appEl.querySelectorAll('.nav-item').forEach((item) => {
       item.addEventListener('click', () => {
@@ -336,25 +379,6 @@ class AstralNotesApp {
       document.getElementById('auth-btn')?.addEventListener('click', async () => {
         vaultManager.lockVault();
         await signOut(auth);
-      });
-    } else {
-      footer.innerHTML = `
-        <div class="user-info">
-          <span class="user-name">Local Offline Mode</span>
-          <span class="sync-label">Sign in to sync with Android</span>
-        </div>
-        <button class="btn btn-primary" id="auth-btn" style="padding: 6px 14px; font-size: 0.82rem;">
-          ${getIconSvg('log-in', 16)}
-          <span>Sign In</span>
-        </button>
-      `;
-
-      document.getElementById('auth-btn')?.addEventListener('click', async () => {
-        try {
-          await signInWithPopup(auth, googleProvider);
-        } catch (err) {
-          console.error('Sign-in failed:', err);
-        }
       });
     }
   }
@@ -1010,12 +1034,12 @@ class AstralNotesApp {
       <div class="modal-overlay" id="share-modal">
         <div class="modal-card">
           <div class="modal-header">
-            <h3 class="modal-title">Password-Protected Share</h3>
+            <h3 class="modal-title">Password-Protected Read-Only Share</h3>
             <button class="btn-icon" id="modal-close-btn">${getIconSvg('close', 18)}</button>
           </div>
           <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.6;">
-            Create an encrypted, unguessable link for "<strong>${note.title || 'Untitled'}</strong>".
-            Only users with the password can decrypt and read this note.
+            Create an encrypted, read-only link for "<strong>${note.title || 'Untitled'}</strong>".
+            Recipients can decrypt and read the note using the password, but cannot edit or alter your content.
           </p>
           <div id="share-form">
             <div class="form-group">
@@ -1024,7 +1048,7 @@ class AstralNotesApp {
             </div>
             <button class="btn btn-primary" id="generate-share-btn" style="width: 100%; padding: 12px;">
               ${getIconSvg('lock', 16)}
-              <span>Generate Protected Link</span>
+              <span>Generate Read-Only Link</span>
             </button>
           </div>
           <div id="share-result" style="display: none; margin-top: 18px;">
@@ -1034,7 +1058,7 @@ class AstralNotesApp {
             </div>
             <div style="font-size: 0.85rem; color: var(--success); display: flex; align-items: center; gap: 8px; font-weight: 600;">
               ${getIconSvg('check', 16)}
-              <span>Link ready! Share the link and password with recipient.</span>
+              <span>Read-only link ready! Share the link and password with the recipient.</span>
             </div>
           </div>
         </div>
@@ -1070,19 +1094,19 @@ class AstralNotesApp {
       } catch (err) {
         alert(`Failed to create share: ${(err as Error).message}`);
         generateBtn.disabled = false;
-        generateBtn.textContent = 'Generate Protected Link';
+        generateBtn.textContent = 'Generate Read-Only Link';
       }
     });
   }
 
   private renderShareReader(shareId: string): void {
     this.appEl.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; width: 100%;">
-        <div class="modal-card" id="reader-auth-card">
-          <div class="brand-icon" style="margin: 0 auto 16px; width: 48px; height: 48px;">${getIconSvg('lock', 24)}</div>
-          <h2 style="text-align: center; margin-bottom: 8px; font-size: 1.4rem; font-family: var(--font-display);">Protected Astral Note</h2>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; width: 100%; background: radial-gradient(circle at 50% 25%, rgba(240, 120, 138, 0.12) 0%, transparent 60%), var(--bg-dark);">
+        <div class="modal-card" id="reader-auth-card" style="max-width: 440px;">
+          <div class="brand-icon" style="margin: 0 auto 16px; width: 50px; height: 50px;">${getIconSvg('lock', 24)}</div>
+          <h2 style="text-align: center; margin-bottom: 8px; font-size: 1.4rem; font-family: var(--font-display);">Protected Shared Note</h2>
           <p style="text-align: center; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 22px; line-height: 1.6;">
-            This note is encrypted. Enter password to unlock and read.
+            This note is encrypted and read-only. Enter the shared password to unlock and read.
           </p>
           <div class="form-group">
             <input type="password" id="reader-password" class="form-input" placeholder="Enter share password..." />
@@ -1095,9 +1119,21 @@ class AstralNotesApp {
         </div>
 
         <div id="reader-content-card" style="display: none; width: 100%; max-width: 820px; background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-glass);">
-          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 24px;">
-            <h1 id="reader-title" style="font-size: 1.7rem; font-weight: 800; font-family: var(--font-display); color: var(--text-ink);"></h1>
-            <a href="#" class="btn btn-secondary" style="text-decoration: none;">AstralNotes</a>
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); background: var(--color-accent-subtle); padding: 3px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border-active);">Read-Only</span>
+              <h1 id="reader-title" style="font-size: 1.7rem; font-weight: 800; font-family: var(--font-display); color: var(--text-ink); margin-top: 6px;"></h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="btn btn-secondary" id="reader-copy-btn" style="font-size: 0.85rem; padding: 7px 14px;">
+                ${getIconSvg('copy', 14)}
+                <span>Copy Text</span>
+              </button>
+              <a href="#" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 14px; text-decoration: none;">
+                ${getIconSvg('cloud', 14)}
+                <span>Astral Notes</span>
+              </a>
+            </div>
           </div>
           <div id="reader-body" style="line-height: 1.8;"></div>
         </div>
@@ -1115,7 +1151,18 @@ class AstralNotesApp {
         const contentCard = document.getElementById('reader-content-card')!;
         contentCard.style.display = 'block';
         document.getElementById('reader-title')!.textContent = decrypted.title || 'Untitled Note';
-        document.getElementById('reader-body')!.innerHTML = renderMarkdown(decrypted.content);
+        
+        const rendered = renderMarkdown(decrypted.content);
+        const readerBody = document.getElementById('reader-body')!;
+        readerBody.innerHTML = rendered;
+        readerBody.querySelectorAll('.task-checkbox').forEach((cb) => {
+          (cb as HTMLInputElement).disabled = true;
+        });
+
+        document.getElementById('reader-copy-btn')?.addEventListener('click', () => {
+          navigator.clipboard.writeText(`${decrypted.title}\n\n${decrypted.content}`);
+          alert('Note copied to clipboard!');
+        });
       } catch (err) {
         errEl.textContent = (err as Error).message;
       }

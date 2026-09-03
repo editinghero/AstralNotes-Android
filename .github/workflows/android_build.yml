@@ -40,7 +40,10 @@ jobs:
         run: chmod +x ./gradlew || true
 
       - name: Build Release APK with Gradle
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
+        env:
+          JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
+          GRADLE_OPTS: "-Djava.awt.headless=true -Dorg.gradle.jvmargs='-Xmx4g -Dfile.encoding=UTF-8 -Djava.awt.headless=true'"
+        run: ./gradlew assembleRelease --stacktrace --no-daemon -Djava.awt.headless=true
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
