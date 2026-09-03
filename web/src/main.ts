@@ -708,7 +708,7 @@ class AstralNotesApp {
 
     const allTags = new Set<string>();
     this.notes.forEach(n => {
-      if (!n.isTrash && !n.isDeleted) {
+      if (!n.isTrash && !n.isDeleted && (!n.isLocked || vaultManager.isUnlocked())) {
         n.tags.forEach(t => allTags.add(t));
       }
     });
@@ -1434,14 +1434,14 @@ class AstralNotesApp {
 
     let totalWords = 0;
     this.notes.forEach(n => {
-      if (!n.isTrash && !n.isDeleted) {
+      if (!n.isTrash && !n.isDeleted && (!n.isLocked || vaultManager.isUnlocked())) {
         totalWords += n.content.trim().split(/\s+/).filter(Boolean).length;
       }
     });
 
     const allTags = new Set<string>();
     this.notes.forEach(n => {
-      if (!n.isTrash && !n.isDeleted) {
+      if (!n.isTrash && !n.isDeleted && (!n.isLocked || vaultManager.isUnlocked())) {
         n.tags.forEach(t => allTags.add(t));
       }
     });
