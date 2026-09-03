@@ -7,12 +7,8 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // New Canonical V2 AstralNotes Data
-    match /user/{userId}/notes/{noteId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    match /user/{userId}/vault_meta/{metaId} {
+    // Canonical AstralNotes Data (all subcollections: notes, vault_meta, config, etc.)
+    match /user/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 

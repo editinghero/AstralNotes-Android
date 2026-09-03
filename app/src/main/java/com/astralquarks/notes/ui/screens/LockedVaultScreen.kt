@@ -203,7 +203,7 @@ fun LockedVaultScreen(
                         ) {
                             Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (!vaultSecurityManager.isPasswordSet()) "Set Up Vault Password" else "Unlock Vault")
+                            Text(if (!vaultSecurityManager.isPasswordSet()) "Set Password" else "Unlock Vault")
                         }
 
                         if (vaultSecurityManager.isPasswordSet() &&
