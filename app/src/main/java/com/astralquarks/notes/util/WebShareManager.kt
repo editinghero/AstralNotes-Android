@@ -143,4 +143,24 @@ object WebShareManager {
             false
         }
     }
+
+    suspend fun revokeSharesForNote(noteId: String) = withContext(Dispatchers.IO) {
+        val auth = FirebaseAuth.getInstance()
+        val uid = auth.currentUser?.uid ?: return@withContext
+
+        try {
+            val firestore = FirebaseFirestore.getInstance()
+            val snapshot = firestore.collection("shares")
+                .whereEqualTo("ownerUid", uid)
+                .whereEqualTo("noteId", noteId)
+                .get()
+                .await()
+
+            for (doc in snapshot.documents) {
+                doc.reference.delete().await()
+            }
+        } catch (e: Exception) {
+            // Ignore failure
+        }
+    }
 }

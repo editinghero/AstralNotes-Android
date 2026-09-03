@@ -2,6 +2,7 @@ package com.astralquarks.notes.repository
 
 import com.astralquarks.notes.auth.AuthManager
 import com.astralquarks.notes.db.NoteDao
+import com.astralquarks.notes.util.WebShareManager
 import com.astralquarks.notes.model.Note
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,7 @@ class NoteRepository(
         if (authManager.isSignedIn) {
             repositoryScope.launch {
                 authManager.deleteNoteFromFirestore(noteId)
+                WebShareManager.revokeSharesForNote(noteId)
             }
         }
     }
@@ -94,6 +96,7 @@ class NoteRepository(
             repositoryScope.launch {
                 trashNotes.forEach { note ->
                     authManager.deleteNoteFromFirestore(note.id)
+                    WebShareManager.revokeSharesForNote(note.id)
                 }
             }
         }
