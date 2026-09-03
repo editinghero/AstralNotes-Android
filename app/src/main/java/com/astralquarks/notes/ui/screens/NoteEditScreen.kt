@@ -433,6 +433,7 @@ fun NoteEditScreen(
             ) {
                 tagsList.forEach { tag ->
                     InputChip(
+                        modifier = Modifier.align(Alignment.CenterVertically),
                         selected = false,
                         onClick = { /* no-op */ },
                         label = { Text("#$tag", color = secondaryTextColor) },
@@ -457,7 +458,9 @@ fun NoteEditScreen(
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = if (backgroundColor.luminance() > 0.45f) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.12f),
-                    modifier = Modifier.clickable { showTagDialog = true }
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .clickable { showTagDialog = true }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
