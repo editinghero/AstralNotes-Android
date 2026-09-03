@@ -49,13 +49,15 @@ class AstralNotesApp {
       this.updateSyncUI(status);
     });
 
-    syncEngine.onNotesUpdate((updatedNotes) => {
-      this.notes = updatedNotes;
+    syncEngine.onNotesUpdate(async (updatedNotes) => {
+      const valid = (updatedNotes || []).filter(n => n && n.id);
+      this.notes = await syncEngine.redecryptNotes(valid);
       this.renderNotesList();
       this.renderNavCounts();
     });
 
-    vaultManager.onVaultStateChange(() => {
+    vaultManager.onVaultStateChange(async () => {
+      this.notes = await syncEngine.redecryptNotes(this.notes);
       this.render();
     });
 
@@ -413,6 +415,7 @@ class AstralNotesApp {
 
   private getFilteredNotes(): Note[] {
     return this.notes.filter((note) => {
+      if (!note || typeof note !== 'object' || !note.id) return false;
       if (note.isDeleted) return false;
 
       if (this.currentDestination === 'TRASH') {
@@ -713,6 +716,16 @@ class AstralNotesApp {
     }
   }
 
+  private getColorDisplayHex(hex: string): string {
+    if (hex === '#DEFAULT' || !hex) return '#3d2e30';
+    return hex;
+  }
+
+  private getColorName(hex: string): string {
+    const c = NOTE_COLORS.find(item => item.hex === hex);
+    return c ? c.name : 'Default';
+  }
+
   private createNoteModel(title = '', content = ''): Note {
     return {
       id: crypto.randomUUID(),
@@ -749,11 +762,21 @@ class AstralNotesApp {
           <div class="editor-header">
             <input type="text" id="editor-title" class="editor-title-input" placeholder="Note Title..." value="${this.activeNote.title}" />
             <div style="display: flex; align-items: center; gap: 8px;">
-              <select id="editor-color-select" class="btn btn-secondary" style="padding: 7px 12px; font-size: 0.82rem;">
-                ${NOTE_COLORS.map(c => `
-                  <option value="${c.hex}" ${this.activeNote?.colorHex === c.hex ? 'selected' : ''}>${c.name}</option>
-                `).join('')}
-              </select>
+              <div class="color-picker-wrap" style="position: relative;">
+                <button type="button" class="btn btn-secondary" id="editor-color-trigger" style="padding: 7px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 8px;">
+                  <span id="editor-color-dot" style="width: 12px; height: 12px; border-radius: 50%; background: ${this.getColorDisplayHex(this.activeNote.colorHex)}; border: 1px solid rgba(255,255,255,0.3); display: inline-block;"></span>
+                  <span id="editor-color-label">${this.getColorName(this.activeNote.colorHex)}</span>
+                  ${getIconSvg('chevron-down', 12)}
+                </button>
+                <div id="editor-color-menu" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #22191a; border: 1px solid rgba(240, 120, 138, 0.25); border-radius: 12px; padding: 6px; z-index: 1100; box-shadow: 0 10px 30px rgba(0,0,0,0.6); width: 145px;">
+                  ${NOTE_COLORS.map(c => `
+                    <div class="editor-color-item" data-hex="${c.hex}" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; color: #fff3e0; transition: background 0.15s;">
+                      <span style="width: 12px; height: 12px; border-radius: 50%; background: ${c.hex === '#DEFAULT' ? '#3d2e30' : c.hex}; border: 1px solid rgba(255,255,255,0.3); display: inline-block;"></span>
+                      <span>${c.name}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
 
               <button class="btn btn-secondary" id="editor-vault-btn" title="${this.activeNote.isLocked ? 'Move to Public' : 'Move to Vault'}">
                 ${getIconSvg(this.activeNote.isLocked ? 'unlock' : 'lock', 16)}
@@ -798,12 +821,39 @@ class AstralNotesApp {
     const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
     const titleInput = document.getElementById('editor-title') as HTMLInputElement;
     const preview = document.getElementById('editor-preview')!;
-    const colorSelect = document.getElementById('editor-color-select') as HTMLSelectElement;
+    const colorTrigger = document.getElementById('editor-color-trigger');
+    const colorMenu = document.getElementById('editor-color-menu');
+    const colorDot = document.getElementById('editor-color-dot');
+    const colorLabel = document.getElementById('editor-color-label');
 
-    colorSelect?.addEventListener('change', () => {
-      if (this.activeNote) {
-        this.activeNote.colorHex = colorSelect.value;
+    colorTrigger?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (colorMenu) {
+        colorMenu.style.display = colorMenu.style.display === 'none' ? 'block' : 'none';
       }
+    });
+
+    colorMenu?.querySelectorAll('.editor-color-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const hex = item.getAttribute('data-hex') || '#DEFAULT';
+        if (this.activeNote) {
+          this.activeNote.colorHex = hex;
+        }
+        if (colorDot) colorDot.style.background = this.getColorDisplayHex(hex);
+        if (colorLabel) colorLabel.textContent = this.getColorName(hex);
+        if (colorMenu) colorMenu.style.display = 'none';
+      });
+      item.addEventListener('mouseenter', () => {
+        (item as HTMLElement).style.background = 'rgba(240, 120, 138, 0.2)';
+      });
+      item.addEventListener('mouseleave', () => {
+        (item as HTMLElement).style.background = 'transparent';
+      });
+    });
+
+    document.addEventListener('click', () => {
+      if (colorMenu) colorMenu.style.display = 'none';
     });
 
     document.getElementById('editor-vault-btn')?.addEventListener('click', () => {
@@ -834,18 +884,23 @@ class AstralNotesApp {
 
     document.getElementById('editor-save-btn')?.addEventListener('click', async () => {
       if (!this.activeNote) return;
+      const saveBtn = document.getElementById('editor-save-btn') as HTMLButtonElement | null;
+      if (saveBtn) {
+        if (saveBtn.disabled) return;
+        saveBtn.disabled = true;
+      }
+
       this.activeNote.title = titleInput.value.trim();
       this.activeNote.content = textarea.value;
-      this.activeNote.colorHex = colorSelect.value;
       this.activeNote.updatedAt = Date.now();
 
       await syncEngine.uploadNote(this.activeNote);
 
-      if (isNew) {
-        this.notes.unshift(this.activeNote);
+      const existingIdx = this.notes.findIndex(n => n && n.id === this.activeNote!.id);
+      if (existingIdx !== -1) {
+        this.notes[existingIdx] = this.activeNote;
       } else {
-        const idx = this.notes.findIndex(n => n.id === this.activeNote!.id);
-        if (idx !== -1) this.notes[idx] = this.activeNote;
+        this.notes.unshift(this.activeNote);
       }
 
       this.renderNotesList();

@@ -34,7 +34,8 @@ import {
   LayoutGrid,
   ListFilter,
   ShieldAlert,
-  ArrowLeft
+  ArrowLeft,
+  ChevronDown
 } from 'lucide';
 
 const ICONS: Record<string, unknown> = {
@@ -72,7 +73,8 @@ const ICONS: Record<string, unknown> = {
   grid: LayoutGrid,
   'list-view': ListFilter,
   shield: ShieldAlert,
-  back: ArrowLeft
+  back: ArrowLeft,
+  'chevron-down': ChevronDown
 };
 
 export function getIconSvg(name: string, size = 18, className = ''): string {

@@ -82,61 +82,6 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
                     repository.syncCloudNotes(cloudNotes)
                     QuickNoteWidgetProvider.updateAllWidgets(application)
                 }
-            }
-        }
-
-        // Insert a welcome note if the database is fresh
-        viewModelScope.launch {
-            val isWelcomeNoteCreated = appPrefs.getBoolean("is_welcome_note_created", false)
-            if (!isWelcomeNoteCreated) {
-                val existing = repository.getNoteById("welcome_expressive_note")
-                if (existing == null) {
-                    val welcome = Note(
-                    id = "welcome_expressive_note",
-                    title = "Welcome to AstralNotes",
-                    content = """
-# Android 17 Material Expressive Note
-
-Welcome to **AstralNotes** - featuring full Markdown formatting, dynamic Material You color tinting, and Google Gemini AI.
-
----
-
-### Full Markdown Capabilities:
-- **Bold typography**, *italic emphasis*, ~~strikethrough~~, and ==vibrant highlight==
-- Code blocks with 1-tap copy:
-```kotlin
-fun main() {
-    println("Hello AstralNotes!")
-}
-```
-- Interactive task checklists:
-- [x] Full Markdown engine with headings and code
-- [x] High-resolution image integration
-- [x] Google Keep-inspired fluid layout
-- [ ] Try Google Gemini AI summarization
-- [ ] Create a hidden Private Vault note
-
-> [!NOTE]
-> All notes persist locally offline with Room DB and seamlessly sync with Cloud Firestore when signed in.
-
-### Visual Preview:
-![AstralNotes Header](https://images.unsplash.com/photo-1488866022504-f2584929ca5f?q=80&w=1162&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
-
-| Feature | Support | Security |
-|---|---|---|
-| Markdown | Full MD 100% | High |
-| Cloud Sync | Firestore | OAuth2 |
-| Private Vault | Hidden and Locked | Custom PIN + Biometric |
-                    """.trimIndent(),
-                    colorHex = "#DEFAULT",
-                        tags = listOf("welcome", "guide", "markdown"),
-                        isPinned = true
-                    )
-                    repository.saveNote(welcome)
-                    QuickNoteWidgetProvider.updateAllWidgets(application)
-                }
-                appPrefs.edit().putBoolean("is_welcome_note_created", true).apply()
-            }
         }
     }
 

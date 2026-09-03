@@ -125,7 +125,7 @@ fun VaultAuthDialog(
         },
         title = {
             Text(
-                text = if (!isPasswordSet) "Set Up Vault Password" else "Unlock Private Vault",
+                text = if (!isPasswordSet) "Set Password" else "Unlock Private Vault",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.testTag("vault_auth_title")
             )

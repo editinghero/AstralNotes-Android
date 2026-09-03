@@ -20,6 +20,9 @@ export interface Note {
   deviceId: string;
   isDeleted: boolean;
   isSynced: boolean;
+  isEncrypted?: boolean;
+  encryptedData?: string;
+  iv?: string;
 }
 
 export interface EncryptedNotePayload {

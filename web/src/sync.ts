@@ -11,6 +11,7 @@ import { db, auth } from './firebase';
 import type { Note, SyncStatus, EncryptedNotePayload } from './types';
 import { deriveKey, encryptNotePayload, decryptNotePayload, base64ToBuffer, bufferToBase64, generateSalt } from './crypto';
 import { saveLocalNote, saveLocalNotesBatch, deleteLocalNote, getMetaValue, setMetaValue } from './db';
+import { vaultManager } from './vault';
 
 type StatusListener = (status: SyncStatus) => void;
 type NotesListener = (notes: Note[]) => void;
@@ -98,16 +99,44 @@ class SyncEngine {
           let tags = Array.isArray(data.tags) ? data.tags : [];
           let imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : [];
 
-          if (data.isEncrypted && data.encryptedData && data.iv) {
-            try {
-              const decrypted = await decryptNotePayload(data.encryptedData, data.iv, key);
-              title = decrypted.title;
-              content = decrypted.content;
-              tags = decrypted.tags;
-              imageUrls = decrypted.imageUrls;
-            } catch {
-              title = '[Encrypted Note]';
-              content = 'Encrypted with a different vault key.';
+          const isEncrypted = Boolean(data.isEncrypted);
+          const encryptedData = typeof data.encryptedData === 'string' ? data.encryptedData : undefined;
+          const iv = typeof data.iv === 'string' ? data.iv : undefined;
+
+          if (isEncrypted && encryptedData && iv) {
+            const vaultKey = vaultManager.getVaultKey();
+            let decrypted = false;
+
+            if (vaultKey) {
+              try {
+                const payload = await decryptNotePayload(encryptedData, iv, vaultKey);
+                title = payload.title;
+                content = payload.content;
+                tags = payload.tags;
+                imageUrls = payload.imageUrls;
+                decrypted = true;
+              } catch {}
+            }
+
+            if (!decrypted) {
+              try {
+                const payload = await decryptNotePayload(encryptedData, iv, key);
+                title = payload.title;
+                content = payload.content;
+                tags = payload.tags;
+                imageUrls = payload.imageUrls;
+                decrypted = true;
+              } catch {}
+            }
+
+            if (!decrypted) {
+              if (data.isLocked && !vaultManager.isUnlocked()) {
+                title = '[Locked Note]';
+                content = 'Unlock your private vault to view this encrypted note.';
+              } else {
+                title = '[Encrypted Note]';
+                content = 'Encrypted with a different vault key.';
+              }
             }
           }
 
@@ -128,11 +157,14 @@ class SyncEngine {
             revision: typeof data.revision === 'number' ? data.revision : 1,
             deviceId: typeof data.deviceId === 'string' ? data.deviceId : 'web',
             isDeleted: Boolean(data.isDeleted),
-            isSynced: true
+            isSynced: true,
+            isEncrypted,
+            encryptedData,
+            iv
           });
         }
 
-        const activeCloudNotes = cloudNotes.filter(n => !n.isDeleted);
+        const activeCloudNotes = cloudNotes.filter(n => n && !n.isDeleted);
         await saveLocalNotesBatch(activeCloudNotes);
         this.setStatus('SYNCED');
 
@@ -146,6 +178,56 @@ class SyncEngine {
         this.setStatus('ERROR');
       }
     );
+  }
+
+  public async redecryptNotes(notes: Note[]): Promise<Note[]> {
+    const vaultKey = vaultManager.getVaultKey();
+    const userKey = await this.getOrCreateUserKey();
+    const result: Note[] = [];
+
+    for (const note of notes) {
+      if (!note) continue;
+      if (note.isEncrypted && note.encryptedData && note.iv) {
+        let decrypted = false;
+        let title = note.title;
+        let content = note.content;
+        let tags = note.tags;
+        let imageUrls = note.imageUrls;
+
+        if (vaultKey) {
+          try {
+            const payload = await decryptNotePayload(note.encryptedData, note.iv, vaultKey);
+            title = payload.title;
+            content = payload.content;
+            tags = payload.tags;
+            imageUrls = payload.imageUrls;
+            decrypted = true;
+          } catch {}
+        }
+
+        if (!decrypted) {
+          try {
+            const payload = await decryptNotePayload(note.encryptedData, note.iv, userKey);
+            title = payload.title;
+            content = payload.content;
+            tags = payload.tags;
+            imageUrls = payload.imageUrls;
+            decrypted = true;
+          } catch {}
+        }
+
+        result.push({
+          ...note,
+          title: decrypted ? title : (note.isLocked && !vaultManager.isUnlocked() ? '[Locked Note]' : note.title),
+          content: decrypted ? content : (note.isLocked && !vaultManager.isUnlocked() ? 'Unlock your private vault to view this encrypted note.' : note.content),
+          tags: decrypted ? tags : note.tags,
+          imageUrls: decrypted ? imageUrls : note.imageUrls
+        });
+      } else {
+        result.push(note);
+      }
+    }
+    return result;
   }
 
   public stopRealtimeSync(): void {
@@ -169,7 +251,7 @@ class SyncEngine {
       let payload: EncryptedNotePayload;
 
       if (note.isLocked) {
-        const key = await this.getOrCreateUserKey();
+        const key = vaultManager.getVaultKey() || (await this.getOrCreateUserKey());
         const encrypted = await encryptNotePayload(
           {
             title: note.title,
@@ -197,6 +279,9 @@ class SyncEngine {
           encryptedData: encrypted.encryptedData,
           iv: encrypted.iv
         };
+        note.isEncrypted = true;
+        note.encryptedData = encrypted.encryptedData;
+        note.iv = encrypted.iv;
       } else {
         payload = {
           id: note.id,
