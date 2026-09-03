@@ -603,7 +603,7 @@ fun HomeScreen(
     if (showImageDialogForQuickNote) {
         ImageUrlDialog(
             onDismiss = { showImageDialogForQuickNote = false },
-            onInsertImage = { alt, url ->
+            onInsertImage = { url, alt ->
                 showImageDialogForQuickNote = false
                 val syntax = if (alt.isNotBlank()) "![$alt]($url)\n\n" else "![]($url)\n\n"
                 onCreateNote(syntax)
