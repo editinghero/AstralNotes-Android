@@ -1,0 +1,87 @@
+import {
+  createElement,
+  Search,
+  Menu,
+  Plus,
+  Pin,
+  PinOff,
+  Archive,
+  ArchiveRestore,
+  Trash2,
+  Lock,
+  Unlock,
+  Palette,
+  Share2,
+  Edit3,
+  Eye,
+  Code,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Image,
+  LogIn,
+  LogOut,
+  Check,
+  RefreshCw,
+  AlertCircle,
+  Cloud,
+  ExternalLink,
+  Copy,
+  X,
+  Tag,
+  FileText,
+  Upload,
+  LayoutGrid,
+  ListFilter,
+  ShieldAlert,
+  ArrowLeft
+} from 'lucide';
+
+const ICONS: Record<string, unknown> = {
+  search: Search,
+  menu: Menu,
+  plus: Plus,
+  pin: Pin,
+  'pin-off': PinOff,
+  archive: Archive,
+  'archive-restore': ArchiveRestore,
+  trash: Trash2,
+  lock: Lock,
+  unlock: Unlock,
+  palette: Palette,
+  share: Share2,
+  edit: Edit3,
+  eye: Eye,
+  code: Code,
+  list: List,
+  'list-ordered': ListOrdered,
+  'check-square': CheckSquare,
+  image: Image,
+  'log-in': LogIn,
+  'log-out': LogOut,
+  check: Check,
+  refresh: RefreshCw,
+  alert: AlertCircle,
+  cloud: Cloud,
+  'external-link': ExternalLink,
+  copy: Copy,
+  close: X,
+  tag: Tag,
+  file: FileText,
+  upload: Upload,
+  grid: LayoutGrid,
+  'list-view': ListFilter,
+  shield: ShieldAlert,
+  back: ArrowLeft
+};
+
+export function getIconSvg(name: string, size = 18, className = ''): string {
+  const iconDef = ICONS[name];
+  if (!iconDef) return '';
+  const el = createElement(iconDef as Parameters<typeof createElement>[0], {
+    width: size,
+    height: size,
+    class: className
+  });
+  return el.outerHTML;
+}

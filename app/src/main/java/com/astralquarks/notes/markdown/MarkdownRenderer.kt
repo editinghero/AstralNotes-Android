@@ -301,22 +301,22 @@ private fun BulletListView(items: List<String>, textColor: Color = MaterialTheme
 }
 
 @Composable
-private fun NumberedListView(items: List<String>, textColor: Color = MaterialTheme.colorScheme.onSurface) {
+private fun NumberedListView(items: List<NumberedItem>, textColor: Color = MaterialTheme.colorScheme.onSurface) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items.forEachIndexed { index, item ->
+        items.forEach { item ->
             Row(
                 verticalAlignment = Alignment.Top,
                 modifier = Modifier.padding(start = 4.dp)
             ) {
                 Text(
-                    text = "${index + 1}.",
+                    text = "${item.number}.",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     ),
-                    modifier = Modifier.width(24.dp)
+                    modifier = Modifier.width(28.dp)
                 )
-                ParagraphBlockView(item, textColor)
+                ParagraphBlockView(item.text, textColor)
             }
         }
     }
@@ -340,7 +340,7 @@ private fun TaskListView(
             ) {
                 Checkbox(
                     checked = item.checked,
-                    onCheckedChange = { onToggle?.invoke(item) },
+                    onCheckedChange = null, // Handled exclusively by Row clickable to avoid double toggling
                     colors = CheckboxDefaults.colors(
                         checkedColor = MaterialTheme.colorScheme.primary,
                         uncheckedColor = MaterialTheme.colorScheme.outline
@@ -349,7 +349,7 @@ private fun TaskListView(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = item.text,
+                    text = item.text.ifBlank { "Task item" },
                     style = MaterialTheme.typography.bodyLarge.copy(
                         color = if (item.checked) textColor.copy(alpha = 0.5f) else textColor,
                         textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None
@@ -418,6 +418,31 @@ private fun TableBlockView(table: MarkdownBlock.Table, textColor: Color = Materi
 private fun ImageBlockView(alt: String, url: String) {
     var showPreviewDialog by remember { mutableStateOf(false) }
 
+    val cleanUrl = url.trim()
+    val isValidUrl = cleanUrl.isNotBlank() && (
+        cleanUrl.startsWith("http://", ignoreCase = true) ||
+        cleanUrl.startsWith("https://", ignoreCase = true) ||
+        cleanUrl.startsWith("content://", ignoreCase = true) ||
+        cleanUrl.startsWith("file://", ignoreCase = true)
+    )
+
+    if (!isValidUrl) {
+        if (alt.isNotBlank()) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = alt,
+                    style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+        return
+    }
+
     Card(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
@@ -426,7 +451,7 @@ private fun ImageBlockView(alt: String, url: String) {
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             SubcomposeAsyncImage(
-                model = url,
+                model = cleanUrl,
                 contentDescription = alt,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -446,13 +471,13 @@ private fun ImageBlockView(alt: String, url: String) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp)
-                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
+                            .height(80.dp)
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Failed to load image ($url)",
-                            style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.error)
+                            text = if (alt.isNotBlank()) alt else "Image unavailable",
+                            style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onErrorContainer)
                         )
                     }
                 }

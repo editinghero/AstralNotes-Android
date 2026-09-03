@@ -66,7 +66,9 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
         // Observe user sign-in state to automatically trigger full bidirectional sync
         viewModelScope.launch {
             authManager.currentUser.collect { user ->
+                vaultSecurityManager.lockVault()
                 if (user != null) {
+                    vaultSecurityManager.checkVaultExists()
                     repository.syncAllWithCloud()
                     QuickNoteWidgetProvider.updateAllWidgets(application)
                 }

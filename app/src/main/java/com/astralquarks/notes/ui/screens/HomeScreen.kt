@@ -45,9 +45,20 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import com.astralquarks.notes.ui.components.ImageUrlDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
@@ -94,13 +105,57 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     userPhotoUrl: String?,
     userDisplayName: String?,
-    isSyncing: Boolean,
+    isSyncing: Boolean = false,
+    syncStatus: com.astralquarks.notes.auth.SyncStatus = com.astralquarks.notes.auth.SyncStatus.SYNCED,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var isGridView by remember { mutableStateOf(true) }
     var noteForColorPicker by remember { mutableStateOf<Note?>(null) }
     var noteToShare by remember { mutableStateOf<Note?>(null) }
+    var isExportingShare by remember { mutableStateOf(false) }
+    var shareStatusText by remember { mutableStateOf<String?>(null) }
+    var showImageDialogForQuickNote by remember { mutableStateOf(false) }
+    var showCreateActionSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val markdownPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                    withContext(Dispatchers.Main) {
+                        onCreateNote(content)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to read Markdown file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    val textPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                    withContext(Dispatchers.Main) {
+                        onCreateNote(content)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to read text file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
     var selectedTags by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Distinct tags with count
@@ -154,6 +209,7 @@ fun HomeScreen(
                     userPhotoUrl = userPhotoUrl,
                     userDisplayName = userDisplayName,
                     isSyncing = isSyncing,
+                    syncStatus = syncStatus,
                     onProfileClick = onProfileClick
                 )
 
@@ -278,7 +334,7 @@ fun HomeScreen(
                             }
 
                             IconButton(
-                                onClick = { onCreateNote("![Image]()\n\n") },
+                                onClick = { showImageDialogForQuickNote = true },
                                 modifier = Modifier
                                     .size(38.dp)
                                     .testTag("quick_image_button")
@@ -309,7 +365,7 @@ fun HomeScreen(
 
                             // Material 3 Expressive Add FAB
                             FloatingActionButton(
-                                onClick = { onCreateNote("") },
+                                onClick = { showCreateActionSheet = true },
                                 shape = RoundedCornerShape(24.dp),
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -507,11 +563,175 @@ fun HomeScreen(
         val target = noteToShare!!
         ShareNoteDialog(
             noteTitle = target.title,
+            isExporting = isExportingShare,
+            exportStatus = shareStatusText,
             onSelectFormat = { format ->
-                NoteExporter.shareNote(context, target, format)
+                isExportingShare = true
+                shareStatusText = "Preparing share..."
+                NoteExporter.shareNote(
+                    context = context,
+                    note = target,
+                    format = format,
+                    onStatusChange = { status ->
+                        shareStatusText = status
+                    },
+                    onComplete = {
+                        isExportingShare = false
+                        shareStatusText = null
+                        noteToShare = null
+                    },
+                    onError = {
+                        isExportingShare = false
+                        shareStatusText = null
+                    }
+                )
             },
-            onDismiss = { noteToShare = null }
+            onDismiss = {
+                if (!isExportingShare) {
+                    noteToShare = null
+                }
+            }
         )
+    }
+
+    // Quick Image Dialog
+    if (showImageDialogForQuickNote) {
+        ImageUrlDialog(
+            onDismiss = { showImageDialogForQuickNote = false },
+            onInsertImage = { alt, url ->
+                showImageDialogForQuickNote = false
+                val syntax = if (alt.isNotBlank()) "![$alt]($url)\n\n" else "![]($url)\n\n"
+                onCreateNote(syntax)
+            }
+        )
+    }
+
+    // Material Expressive Plus Action Surface
+    if (showCreateActionSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showCreateActionSheet = false },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 36.dp, top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Create or Import",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                Surface(
+                    onClick = {
+                        showCreateActionSheet = false
+                        onCreateNote("")
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "New Note",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            Text(
+                                text = "Blank note with full Markdown & AI capabilities",
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        showCreateActionSheet = false
+                        markdownPickerLauncher.launch("*/*")
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Import Markdown (.md)",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            Text(
+                                text = "Select a .md file to create a note instantly",
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        showCreateActionSheet = false
+                        textPickerLauncher.launch("text/plain")
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TextFields,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Import Text (.txt)",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            Text(
+                                text = "Import plain text into an Astral Note",
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

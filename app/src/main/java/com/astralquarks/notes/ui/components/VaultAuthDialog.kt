@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,14 +48,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.astralquarks.notes.security.VaultAuthMode
+import kotlinx.coroutines.launch
 
 @Composable
 fun VaultAuthDialog(
     isPasswordSet: Boolean,
     authMode: VaultAuthMode,
     isBiometricAvailable: Boolean,
-    onVerifyPassword: (String) -> Boolean,
-    onSetPassword: (String) -> Unit,
+    onVerifyPassword: suspend (String) -> Result<Boolean>,
+    onSetPassword: suspend (String) -> Result<Unit>,
     onTriggerBiometric: (onSuccess: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onSuccess: () -> Unit
@@ -62,9 +65,47 @@ fun VaultAuthDialog(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isProcessing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val handleConfirm = {
+        if (isPasswordSet) {
+            if (password.isBlank()) {
+                errorMessage = "Please enter your vault password."
+            } else {
+                isProcessing = true
+                errorMessage = null
+                scope.launch {
+                    val result = onVerifyPassword(password)
+                    isProcessing = false
+                    result.fold(
+                        onSuccess = { onSuccess() },
+                        onFailure = { errorMessage = it.localizedMessage ?: "Incorrect vault password." }
+                    )
+                }
+            }
+        } else {
+            if (password.length < 4) {
+                errorMessage = "Password must be at least 4 characters."
+            } else if (password != confirmPassword) {
+                errorMessage = "Passwords do not match."
+            } else {
+                isProcessing = true
+                errorMessage = null
+                scope.launch {
+                    val result = onSetPassword(password)
+                    isProcessing = false
+                    result.fold(
+                        onSuccess = { onSuccess() },
+                        onFailure = { errorMessage = it.localizedMessage ?: "Failed to set vault password." }
+                    )
+                }
+            }
+        }
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isProcessing) onDismiss() },
         shape = RoundedCornerShape(28.dp),
         icon = {
             Surface(
@@ -96,9 +137,9 @@ fun VaultAuthDialog(
             ) {
                 Text(
                     text = if (!isPasswordSet)
-                        "Create a custom password to securely protect your private notes. Android device screen lock is NOT used."
+                        "Create a custom vault password to encrypt your private notes. Separate from your Google account."
                     else
-                        "Enter your custom vault password to access your hidden notes.",
+                        "Enter your private vault password to unlock your notes.",
                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                 )
 
@@ -109,23 +150,16 @@ fun VaultAuthDialog(
                             password = it
                             errorMessage = null
                         },
-                        label = { Text(if (!isPasswordSet) "New Password / PIN" else "Password") },
+                        label = { Text(if (!isPasswordSet) "New Password / PIN" else "Vault Password") },
                         singleLine = true,
+                        enabled = !isProcessing,
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = if (!isPasswordSet) ImeAction.Next else ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (isPasswordSet) {
-                                    if (onVerifyPassword(password)) {
-                                        onSuccess()
-                                    } else {
-                                        errorMessage = "Incorrect vault password."
-                                    }
-                                }
-                            }
+                            onDone = { handleConfirm() }
                         ),
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -148,22 +182,14 @@ fun VaultAuthDialog(
                             },
                             label = { Text("Confirm Password") },
                             singleLine = true,
+                            enabled = !isProcessing,
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password,
                                 imeAction = ImeAction.Done
                             ),
                             keyboardActions = KeyboardActions(
-                                onDone = {
-                                    if (password.length < 4) {
-                                        errorMessage = "Password must be at least 4 characters."
-                                    } else if (password != confirmPassword) {
-                                        errorMessage = "Passwords do not match."
-                                    } else {
-                                        onSetPassword(password)
-                                        onSuccess()
-                                    }
-                                }
+                                onDone = { handleConfirm() }
                             ),
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth().testTag("vault_confirm_password_input")
@@ -179,61 +205,41 @@ fun VaultAuthDialog(
                     )
                 }
 
-                // Biometric unlock button if available and configured
-                if (isPasswordSet && isBiometricAvailable && (authMode == VaultAuthMode.BIOMETRIC_ONLY || authMode == VaultAuthMode.PASSWORD_AND_BIOMETRIC)) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    FilledTonalButton(
-                        onClick = { onTriggerBiometric { onSuccess() } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .testTag("vault_biometric_button"),
-                        shape = RoundedCornerShape(14.dp)
+                if (isProcessing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Fingerprint,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Unlock with Biometric")
+                        Text(
+                            text = if (isPasswordSet) "Verifying vault password..." else "Encrypting and setting up vault...",
+                            style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.primary)
+                        )
                     }
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (!isPasswordSet) {
-                        if (password.length < 4) {
-                            errorMessage = "Password must be at least 4 characters."
-                        } else if (password != confirmPassword) {
-                            errorMessage = "Passwords do not match."
-                        } else {
-                            onSetPassword(password)
-                            onSuccess()
-                        }
-                    } else {
-                        if (onVerifyPassword(password)) {
-                            onSuccess()
-                        } else {
-                            errorMessage = "Incorrect vault password."
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.testTag("vault_confirm_button")
+                onClick = handleConfirm,
+                enabled = !isProcessing,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                ),
+                modifier = Modifier.testTag("vault_submit_button")
             ) {
                 Text(if (!isPasswordSet) "Set Password" else "Unlock")
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.testTag("vault_cancel_button")
-            ) {
-                Text("Cancel")
+            if (!isProcessing) {
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag("vault_dismiss_button")) {
+                    Text("Cancel")
+                }
             }
         }
     )

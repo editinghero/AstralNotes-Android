@@ -19,3 +19,8 @@ export/
 *.log
 debug.txt
 temp_gradle*/
+node_modules/
+web/node_modules/
+web/dist/
+dist/
+.env*

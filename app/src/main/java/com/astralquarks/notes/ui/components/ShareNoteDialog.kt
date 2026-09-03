@@ -36,14 +36,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.astralquarks.notes.util.NoteExporter
 
+import androidx.compose.material3.CircularProgressIndicator
+
 @Composable
 fun ShareNoteDialog(
     noteTitle: String,
     onSelectFormat: (NoteExporter.ExportFormat) -> Unit,
+    isExporting: Boolean = false,
+    exportStatus: String? = null,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isExporting) onDismiss() },
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -55,7 +59,7 @@ fun ShareNoteDialog(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Share Note",
+                    text = if (isExporting) "Exporting Document" else "Share Note",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -65,51 +69,77 @@ fun ShareNoteDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "Choose format to export \"${noteTitle.ifBlank { "Untitled" }}\":",
-                    style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
-                )
+                if (isExporting) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                strokeWidth = 3.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = exportStatus ?: "Preparing export...",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Choose format to export \"${noteTitle.ifBlank { "Untitled" }}\":",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                ShareOptionItem(
-                    title = "Markdown (.md)",
-                    description = "Raw markdown with tags, headings, and checklists",
-                    icon = Icons.Default.Code,
-                    onClick = {
-                        onSelectFormat(NoteExporter.ExportFormat.MARKDOWN)
-                        onDismiss()
-                    },
-                    testTag = "share_md_option"
-                )
+                    ShareOptionItem(
+                        title = "Markdown (.md)",
+                        description = "Raw markdown with tags, headings, and checklists",
+                        icon = Icons.Default.Code,
+                        onClick = { onSelectFormat(NoteExporter.ExportFormat.MARKDOWN) },
+                        testTag = "share_md_option"
+                    )
 
-                ShareOptionItem(
-                    title = "HTML Web Page (.html)",
-                    description = "Formatted styled web document ready to view or print",
-                    icon = Icons.Default.Description,
-                    onClick = {
-                        onSelectFormat(NoteExporter.ExportFormat.HTML)
-                        onDismiss()
-                    },
-                    testTag = "share_html_option"
-                )
+                    ShareOptionItem(
+                        title = "HTML Web Page (.html)",
+                        description = "Formatted styled web document ready to view or print",
+                        icon = Icons.Default.Description,
+                        onClick = { onSelectFormat(NoteExporter.ExportFormat.HTML) },
+                        testTag = "share_html_option"
+                    )
 
-                ShareOptionItem(
-                    title = "PDF Document (.pdf)",
-                    description = "Printable formatted document compatible with all readers",
-                    icon = Icons.Default.PictureAsPdf,
-                    onClick = {
-                        onSelectFormat(NoteExporter.ExportFormat.PDF)
-                        onDismiss()
-                    },
-                    testTag = "share_pdf_option"
-                )
+                    ShareOptionItem(
+                        title = "PDF Document (.pdf)",
+                        description = "Printable formatted document compatible with all readers",
+                        icon = Icons.Default.PictureAsPdf,
+                        onClick = { onSelectFormat(NoteExporter.ExportFormat.PDF) },
+                        testTag = "share_pdf_option"
+                    )
+                }
             }
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            if (!isExporting) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
             }
         },
         shape = RoundedCornerShape(24.dp)

@@ -298,7 +298,11 @@ fun NoteCard(
 
                         DropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                            onDismissRequest = { showMenu = false },
+                            shape = RoundedCornerShape(20.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp
                         ) {
                             if (!isTrashSection) {
                                 if (onShare != null) {

@@ -150,6 +150,8 @@ fun NoteEditScreen(
     var showLinkDialog by remember { mutableStateOf(false) }
     var showAiSheet by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var isExportingShare by remember { mutableStateOf(false) }
+    var shareStatusText by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(noteId) {
         if (!noteId.isNullOrBlank()) {
@@ -348,19 +350,29 @@ fun NoteEditScreen(
         },
         bottomBar = {
             if (isRawMode) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .imePadding()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     MarkdownToolbar(
                         onInsertText = { prefix, suffix, placeholder ->
                             val currentText = contentValue.text
                             val selection = contentValue.selection
+                            val effectivePrefix = if (prefix == "1. ") {
+                                val textBeforeCursor = currentText.substring(0, selection.start)
+                                val lastLine = textBeforeCursor.lines().lastOrNull { it.isNotBlank() } ?: ""
+                                val numMatch = Regex("^(\\s*)(\\d+)\\.\\s*").find(lastLine)
+                                val nextNum = if (numMatch != null) (numMatch.groupValues[2].toIntOrNull() ?: 0) + 1 else 1
+                                "$nextNum. "
+                            } else prefix
+
                             val selectedText = if (selection.collapsed) placeholder else currentText.substring(selection.start, selection.end)
-                            val newText = currentText.substring(0, selection.start) + prefix + selectedText + suffix + currentText.substring(selection.end)
-                            val newCursor = selection.start + prefix.length + selectedText.length + suffix.length
+                            val newText = currentText.substring(0, selection.start) + effectivePrefix + selectedText + suffix + currentText.substring(selection.end)
+                            val newCursor = selection.start + effectivePrefix.length + selectedText.length + suffix.length
                             contentValue = TextFieldValue(newText, TextRange(newCursor))
                             persistChanges()
                         },
@@ -472,8 +484,7 @@ fun NoteEditScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { isRawMode = true },
+                        .padding(vertical = 4.dp),
                     color = Color.Transparent
                 ) {
                     if (contentValue.text.isBlank()) {
@@ -482,7 +493,9 @@ fun NoteEditScreen(
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 color = secondaryTextColor.copy(alpha = 0.6f)
                             ),
-                            modifier = Modifier.padding(vertical = 12.dp)
+                            modifier = Modifier
+                                .padding(vertical = 12.dp)
+                                .clickable { isRawMode = true }
                         )
                     } else {
                         MarkdownRenderer(
@@ -687,10 +700,34 @@ fun NoteEditScreen(
         )
         ShareNoteDialog(
             noteTitle = currentSnapshot.title,
+            isExporting = isExportingShare,
+            exportStatus = shareStatusText,
             onSelectFormat = { format ->
-                NoteExporter.shareNote(context, currentSnapshot, format)
+                isExportingShare = true
+                shareStatusText = "Preparing share..."
+                NoteExporter.shareNote(
+                    context = context,
+                    note = currentSnapshot,
+                    format = format,
+                    onStatusChange = { status ->
+                        shareStatusText = status
+                    },
+                    onComplete = {
+                        isExportingShare = false
+                        shareStatusText = null
+                        showShareDialog = false
+                    },
+                    onError = {
+                        isExportingShare = false
+                        shareStatusText = null
+                    }
+                )
             },
-            onDismiss = { showShareDialog = false }
+            onDismiss = {
+                if (!isExportingShare) {
+                    showShareDialog = false
+                }
+            }
         )
     }
 }

@@ -54,7 +54,8 @@ fun ExpressiveSearchBar(
     onToggleView: () -> Unit,
     userPhotoUrl: String?,
     userDisplayName: String?,
-    isSyncing: Boolean,
+    isSyncing: Boolean = false,
+    syncStatus: com.astralquarks.notes.auth.SyncStatus = com.astralquarks.notes.auth.SyncStatus.SYNCED,
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -178,38 +179,71 @@ fun ExpressiveSearchBar(
                 )
             }
 
-            // Syncing indicator or User Avatar
+            // Syncing indicator or User Avatar with explicit status badge
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
+                    .size(40.dp)
                     .clickable { onProfileClick() }
                     .testTag("user_avatar_button"),
                 contentAlignment = Alignment.Center
             ) {
-                if (isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else if (!userPhotoUrl.isNullOrBlank()) {
+                if (!userPhotoUrl.isNullOrBlank()) {
                     AsyncImage(
                         model = userPhotoUrl,
                         contentDescription = "User profile: $userDisplayName",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
                         contentDescription = "Account / Sign in",
                         tint = if (userDisplayName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(34.dp)
                     )
+                }
+
+                // Explicit Sync State Badge
+                when {
+                    isSyncing || syncStatus == com.astralquarks.notes.auth.SyncStatus.SYNCING -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(13.dp)
+                                .align(Alignment.BottomEnd),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    syncStatus == com.astralquarks.notes.auth.SyncStatus.SYNCED -> {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(Color(0xFF2E7D32), CircleShape)
+                                .border(1.5.dp, MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        )
+                    }
+                    syncStatus == com.astralquarks.notes.auth.SyncStatus.OFFLINE_PENDING -> {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(Color(0xFFE65100), CircleShape)
+                                .border(1.5.dp, MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        )
+                    }
+                    syncStatus == com.astralquarks.notes.auth.SyncStatus.ERROR -> {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(Color(0xFFC62828), CircleShape)
+                                .border(1.5.dp, MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        )
+                    }
                 }
             }
         }

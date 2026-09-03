@@ -109,6 +109,7 @@ fun MainAppContent(
 
     val currentUser by viewModel.authManager.currentUser.collectAsState()
     val isSyncing by viewModel.authManager.isSyncing.collectAsState()
+    val syncStatus by viewModel.authManager.syncStatus.collectAsState()
 
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     var showGlobalAiSheet by remember { mutableStateOf(false) }
@@ -125,7 +126,7 @@ fun MainAppContent(
                 currentScreen = Screen.EditNote(null, "- [ ] ")
             }
             QuickNoteWidgetProvider.ACTION_NEW_IMAGE_NOTE -> {
-                currentScreen = Screen.EditNote(null, "![Image]()\n\n")
+                currentScreen = Screen.EditNote(null, "")
             }
             QuickNoteWidgetProvider.ACTION_OPEN_AI -> {
                 showGlobalAiSheet = true
@@ -223,7 +224,8 @@ fun MainAppContent(
                         },
                         userPhotoUrl = currentUser?.photoUrl?.toString(),
                         userDisplayName = currentUser?.displayName,
-                        isSyncing = isSyncing
+                        isSyncing = isSyncing,
+                        syncStatus = syncStatus
                     )
                 }
 

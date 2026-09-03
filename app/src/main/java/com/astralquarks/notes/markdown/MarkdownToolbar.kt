@@ -51,10 +51,11 @@ fun MarkdownToolbar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .height(54.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp
+        shape = RoundedCornerShape(26.dp),
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier

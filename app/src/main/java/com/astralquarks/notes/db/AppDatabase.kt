@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import com.astralquarks.notes.model.AiChatMessageEntity
 import com.astralquarks.notes.model.Note
 
-@Database(entities = [Note::class, AiChatMessageEntity::class], version = 2, exportSchema = false)
+@Database(entities = [Note::class, AiChatMessageEntity::class], version = 3, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao

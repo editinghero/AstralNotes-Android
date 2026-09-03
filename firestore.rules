@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Legacy data protection: Keep collection intact, restrict tampering
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // New Canonical V2 AstralNotes Data
+    match /user/{userId}/notes/{noteId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /user/{userId}/vault_meta/{metaId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Password-protected encrypted web shares (Section 31)
+    match /shares/{shareId} {
+      allow read: if true; // Encrypted share payload can be read to verify password client-side
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}

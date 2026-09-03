@@ -40,6 +40,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +75,11 @@ fun LockedVaultScreen(
     modifier: Modifier = Modifier
 ) {
     var showAuthDialog by remember { mutableStateOf(!isVaultUnlocked) }
+    val hasRemoteVault by vaultSecurityManager.hasVault.collectAsState()
+
+    LaunchedEffect(Unit) {
+        vaultSecurityManager.checkVaultExists()
+    }
 
     Scaffold(
         modifier = modifier
@@ -273,16 +280,16 @@ fun LockedVaultScreen(
     }
 
     if (showAuthDialog) {
+        val isExistingVault = (hasRemoteVault == true) || vaultSecurityManager.isPasswordSet()
         VaultAuthDialog(
-            isPasswordSet = vaultSecurityManager.isPasswordSet(),
+            isPasswordSet = isExistingVault,
             authMode = vaultSecurityManager.getAuthMode(),
             isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
-            onVerifyPassword = { vaultSecurityManager.verifyPassword(it) },
-            onSetPassword = { vaultSecurityManager.setPassword(it) },
+            onVerifyPassword = { password -> vaultSecurityManager.unlockWithPassword(password) },
+            onSetPassword = { password -> vaultSecurityManager.setupNewVault(password) },
             onTriggerBiometric = onTriggerBiometric,
             onDismiss = { showAuthDialog = false },
             onSuccess = {
-                vaultSecurityManager.unlockVault()
                 showAuthDialog = false
             }
         )

@@ -18,6 +18,10 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object NoteExporter {
 
@@ -27,15 +31,41 @@ object NoteExporter {
         PDF
     }
 
-    fun shareNote(context: Context, note: Note, format: ExportFormat) {
-        try {
-            when (format) {
-                ExportFormat.MARKDOWN -> shareAsMarkdown(context, note)
-                ExportFormat.HTML -> shareAsHtml(context, note)
-                ExportFormat.PDF -> shareAsPdf(context, note)
+    fun shareNote(
+        context: Context,
+        note: Note,
+        format: ExportFormat,
+        onStatusChange: ((String) -> Unit)? = null,
+        onComplete: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                withContext(Dispatchers.Main) { onStatusChange?.invoke("Preparing share...") }
+                when (format) {
+                    ExportFormat.MARKDOWN -> {
+                        withContext(Dispatchers.Main) { onStatusChange?.invoke("Processing Markdown content...") }
+                        shareAsMarkdown(context, note)
+                    }
+                    ExportFormat.HTML -> {
+                        withContext(Dispatchers.Main) { onStatusChange?.invoke("Generating styled HTML document...") }
+                        shareAsHtml(context, note)
+                    }
+                    ExportFormat.PDF -> {
+                        withContext(Dispatchers.Main) { onStatusChange?.invoke("Rendering PDF document...") }
+                        shareAsPdf(context, note)
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    onComplete?.invoke()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    val errorMsg = e.localizedMessage ?: "Failed to generate export"
+                    onError?.invoke(errorMsg)
+                    Toast.makeText(context, "Share error: $errorMsg", Toast.LENGTH_LONG).show()
+                }
             }
-        } catch (e: Exception) {
-            Toast.makeText(context, "Failed to share note: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -136,9 +166,10 @@ object NoteExporter {
                     bodyHtmlBuilder.append("</ul>\n")
                 }
                 is MarkdownBlock.NumberedList -> {
-                    bodyHtmlBuilder.append("<ol>\n")
+                    val firstNum = block.items.firstOrNull()?.number ?: 1
+                    bodyHtmlBuilder.append("<ol start=\"$firstNum\">\n")
                     for (item in block.items) {
-                        bodyHtmlBuilder.append("  <li>${renderHtmlInline(item)}</li>\n")
+                        bodyHtmlBuilder.append("  <li value=\"${item.number}\">${renderHtmlInline(item.text)}</li>\n")
                     }
                     bodyHtmlBuilder.append("</ol>\n")
                 }

@@ -6,13 +6,18 @@ sealed class MarkdownBlock {
     data class Blockquote(val lines: List<String>, val alertType: AlertType? = null) : MarkdownBlock()
     data class CodeBlock(val language: String, val code: String) : MarkdownBlock()
     data class BulletList(val items: List<String>) : MarkdownBlock()
-    data class NumberedList(val items: List<String>) : MarkdownBlock()
+    data class NumberedList(val items: List<NumberedItem>) : MarkdownBlock()
     data class TaskList(val items: List<TaskItem>) : MarkdownBlock()
     data class Table(val headers: List<String>, val rows: List<List<String>>) : MarkdownBlock()
     object HorizontalRule : MarkdownBlock()
     data class ImageBlock(val alt: String, val url: String) : MarkdownBlock()
     data class Details(val summary: String, val content: String) : MarkdownBlock()
 }
+
+data class NumberedItem(
+    val number: Int,
+    val text: String
+)
 
 data class TaskItem(
     val checked: Boolean,
@@ -145,12 +150,12 @@ object MarkdownParser {
             }
 
             // Task list (- [ ] or - [x] or * [ ])
-            if (trimmed.matches(Regex("^[\\-*+]\\s+\\[[ xX]\\]\\s+.*"))) {
+            if (trimmed.matches(Regex("^[\\-*+]\\s*\\[[ xX]\\](\\s.*)?$"))) {
                 val taskItems = mutableListOf<TaskItem>()
-                while (i < lines.size && lines[i].trim().matches(Regex("^[\\-*+]\\s+\\[[ xX]\\]\\s+.*"))) {
+                while (i < lines.size && lines[i].trim().matches(Regex("^[\\-*+]\\s*\\[[ xX]\\](\\s.*)?$"))) {
                     val currentLine = lines[i].trim()
-                    val isChecked = currentLine.matches(Regex("^[\\-*+]\\s+\\[[xX]\\].*"))
-                    val taskText = currentLine.replaceFirst(Regex("^[\\-*+]\\s+\\[[ xX]\\]\\s*"), "")
+                    val isChecked = currentLine.matches(Regex("^[\\-*+]\\s*\\[[xX]\\].*"))
+                    val taskText = currentLine.replaceFirst(Regex("^[\\-*+]\\s*\\[[ xX]\\]\\s*"), "")
                     taskItems.add(TaskItem(checked = isChecked, text = taskText, rawLineIndex = i))
                     i++
                 }
@@ -161,24 +166,40 @@ object MarkdownParser {
             // Bullet list (- or * or +)
             if (trimmed.matches(Regex("^[\\-*+]\\s+.*"))) {
                 val items = mutableListOf<String>()
-                while (i < lines.size && lines[i].trim().matches(Regex("^[\\-*+]\\s+.*")) && !lines[i].trim().matches(Regex("^[\\-*+]\\s+\\[[ xX]\\].*"))) {
+                while (i < lines.size && lines[i].trim().matches(Regex("^[\\-*+]\\s+.*")) && !lines[i].trim().matches(Regex("^[\\-*+]\\s*\\[[ xX]\\].*"))) {
                     val itemText = lines[i].trim().replaceFirst(Regex("^[\\-*+]\\s+"), "")
                     items.add(itemText)
                     i++
                 }
-                blocks.add(MarkdownBlock.BulletList(items))
+                if (items.isNotEmpty()) {
+                    blocks.add(MarkdownBlock.BulletList(items))
+                } else {
+                    i++ // Safe advance
+                }
                 continue
             }
 
-            // Numbered list (1. 2. etc)
-            if (trimmed.matches(Regex("^\\d+\\.\\s+.*"))) {
-                val items = mutableListOf<String>()
-                while (i < lines.size && lines[i].trim().matches(Regex("^\\d+\\.\\s+.*"))) {
-                    val itemText = lines[i].trim().replaceFirst(Regex("^\\d+\\.\\s+"), "")
-                    items.add(itemText)
-                    i++
+            // Numbered list (1. 2. etc) - Preserve explicit numbering
+            val numberedMatch = Regex("^(\\d+)\\.\\s*(.*)$").find(trimmed)
+            if (numberedMatch != null) {
+                val items = mutableListOf<NumberedItem>()
+                while (i < lines.size) {
+                    val lineTrimmed = lines[i].trim()
+                    val itemMatch = Regex("^(\\d+)\\.\\s*(.*)$").find(lineTrimmed)
+                    if (itemMatch != null) {
+                        val num = itemMatch.groupValues[1].toIntOrNull() ?: (items.size + 1)
+                        val text = itemMatch.groupValues[2]
+                        items.add(NumberedItem(number = num, text = text))
+                        i++
+                    } else {
+                        break
+                    }
                 }
-                blocks.add(MarkdownBlock.NumberedList(items))
+                if (items.isNotEmpty()) {
+                    blocks.add(MarkdownBlock.NumberedList(items))
+                } else {
+                    i++ // Safe advance
+                }
                 continue
             }
 
@@ -203,7 +224,7 @@ object MarkdownParser {
                 !lines[i].trim().startsWith("```") &&
                 !lines[i].trim().startsWith(">") &&
                 !lines[i].trim().matches(Regex("^[\\-*+]\\s+.*")) &&
-                !lines[i].trim().matches(Regex("^\\d+\\.\\s+.*")) &&
+                !lines[i].trim().matches(Regex("^\\d+\\.\\s*.*")) &&
                 !lines[i].trim().matches(Regex("^([\\-*_]\\s*){3,}$")) &&
                 !(lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|"))
             ) {
@@ -227,25 +248,29 @@ object MarkdownParser {
         val lines = markdown.lines().toMutableList()
         if (taskItem.rawLineIndex in 0 until lines.size) {
             val line = lines[taskItem.rawLineIndex]
-            val newLine = if (taskItem.checked) {
-                line.replaceFirst(Regex("\\[[xX]\\]"), "[ ]")
-            } else {
-                line.replaceFirst(Regex("\\[ \\]"), "[x]")
+            if (line.contains("[x]", ignoreCase = true) || line.contains("[ ]")) {
+                val newLine = if (taskItem.checked) {
+                    line.replaceFirst(Regex("\\[[xX]\\]"), "[ ]")
+                } else {
+                    line.replaceFirst(Regex("\\[ \\]"), "[x]")
+                }
+                lines[taskItem.rawLineIndex] = newLine
+                return lines.joinToString("\n")
             }
-            lines[taskItem.rawLineIndex] = newLine
-            return lines.joinToString("\n")
         }
 
-        // Fallback search by text match
-        for (idx in lines.indices) {
-            val line = lines[idx]
-            if (line.contains(taskItem.text)) {
-                if (taskItem.checked && line.contains("[x]", ignoreCase = true)) {
-                    lines[idx] = line.replaceFirst(Regex("\\[[xX]\\]"), "[ ]")
-                    return lines.joinToString("\n")
-                } else if (!taskItem.checked && line.contains("[ ]")) {
-                    lines[idx] = line.replaceFirst("[ ]", "[x]")
-                    return lines.joinToString("\n")
+        // Fallback search by non-empty task text
+        if (taskItem.text.isNotBlank()) {
+            for (idx in lines.indices) {
+                val line = lines[idx]
+                if (line.contains(taskItem.text) && (line.contains("[x]", ignoreCase = true) || line.contains("[ ]"))) {
+                    if (taskItem.checked && line.contains("[x]", ignoreCase = true)) {
+                        lines[idx] = line.replaceFirst(Regex("\\[[xX]\\]"), "[ ]")
+                        return lines.joinToString("\n")
+                    } else if (!taskItem.checked && line.contains("[ ]")) {
+                        lines[idx] = line.replaceFirst("[ ]", "[x]")
+                        return lines.joinToString("\n")
+                    }
                 }
             }
         }
