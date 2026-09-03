@@ -45,10 +45,17 @@ jobs:
           GRADLE_OPTS: "-Djava.awt.headless=true -Dorg.gradle.jvmargs='-Xmx4g -Dfile.encoding=UTF-8 -Djava.awt.headless=true'"
         run: ./gradlew assembleRelease --stacktrace --no-daemon -Djava.awt.headless=true
 
+      - name: Verify and list APK outputs
+        run: |
+          echo "=== Searching for generated APKs ==="
+          find app/build/outputs -type f -name "*.apk" || true
+          ls -la app/build/outputs/apk/release/ || true
+
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: AstralNotes-Release-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
           retention-days: 30
