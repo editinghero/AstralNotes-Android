@@ -136,7 +136,16 @@ fun MainAppContent(
             Intent.ACTION_VIEW -> {
                 val noteId = current.getStringExtra(QuickNoteWidgetProvider.EXTRA_NOTE_ID)
                 if (!noteId.isNullOrBlank()) {
-                    currentScreen = Screen.EditNote(noteId, "")
+                    scope.launch {
+                        val n = viewModel.repository.getNoteById(noteId)
+                        if (n != null) {
+                            if (n.isLocked && !isVaultUnlocked) {
+                                Toast.makeText(activity, "Note is locked. Please unlock the vault first.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                currentScreen = Screen.EditNote(noteId, "")
+                            }
+                        }
+                    }
                 }
             }
         }

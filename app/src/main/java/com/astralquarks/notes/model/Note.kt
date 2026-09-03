@@ -111,7 +111,21 @@ data class Note(
                     // If decryption key does not match, retain placeholder without crashing
                     title = "[Encrypted Note]"
                     content = "Unable to decrypt content with current vault key."
+                    tags = emptyList()
+                    imageUrls = emptyList()
                 }
+            } else if (isEncrypted) {
+                // If it is encrypted but no key was provided or payload is missing, clear tags to avoid leak
+                title = "[Locked Note]"
+                content = "Unlock your private vault to view this encrypted note."
+                tags = emptyList()
+                imageUrls = emptyList()
+            } else if (isLocked && secretKey == null) {
+                // Also protect tags for legacy format or unexpected states if vault is locked
+                title = "[Locked Note]"
+                content = "Unlock your private vault to view this encrypted note."
+                tags = emptyList()
+                imageUrls = emptyList()
             }
 
             return Note(
