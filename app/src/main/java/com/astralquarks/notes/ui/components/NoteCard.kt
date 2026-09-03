@@ -1,5 +1,9 @@
 package com.astralquarks.notes.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -48,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -123,19 +128,30 @@ fun NoteCard(
         }
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        label = "card_scale"
+    )
+
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
+        interactionSource = interactionSource,
+        modifier = modifier.fillMaxWidth().testTag("note_card_${note.id}").graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
+        shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
         border = BorderStroke(
             1.dp,
             if (isDark) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 4.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("note_card_${note.id}")
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 4.dp)
+
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Optional image header

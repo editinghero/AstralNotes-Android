@@ -66,7 +66,7 @@ fun ExpressiveSearchBar(
             .fillMaxWidth()
             .height(56.dp)
             .testTag("expressive_search_bar"),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(32.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 6.dp,
         shadowElevation = 2.dp
