@@ -72,26 +72,11 @@ object LibraryBackupManager {
                 val saltB64 = Base64.encodeToString(exportSalt, Base64.NO_WRAP)
 
                 for (vNote in vaultNotes) {
-                    val decrypted = try {
-                        if (!vNote.encryptedData.isNullOrBlank() && !vNote.iv.isNullOrBlank()) {
-                            CryptoEngine.decryptNotePayload(vNote.encryptedData!!, vNote.iv!!, vaultKey)
-                        } else {
-                            com.astralquarks.notes.security.DecryptedNoteContent(
-                                title = vNote.title,
-                                content = vNote.content,
-                                tags = vNote.tags,
-                                imageUrls = vNote.imageUrls
-                            )
-                        }
-                    } catch (e: Exception) {
-                        return@withContext Result.failure(Exception("Failed to decrypt vault note '${vNote.title}'. Please verify vault password."))
-                    }
-
                     val reEncrypted = CryptoEngine.encryptNotePayload(
-                        title = decrypted.title,
-                        content = decrypted.content,
-                        tags = decrypted.tags,
-                        imageUrls = decrypted.imageUrls,
+                        title = vNote.title,
+                        content = vNote.content,
+                        tags = vNote.tags,
+                        imageUrls = vNote.imageUrls,
                         secretKey = exportKey
                     )
 
@@ -209,51 +194,19 @@ object LibraryBackupManager {
                         return@withContext Result.failure(Exception("Incorrect vault password for the imported file. Could not decrypt locked notes."))
                     }
 
-                    val finalEncData: String?
-                    val finalIv: String?
-                    val finalTitle: String
-                    val finalContent: String
-                    val finalTags: List<String>
-                    val finalImages: List<String>
-
-                    if (currentVaultKey != null) {
-                        val reEnc = CryptoEngine.encryptNotePayload(
-                            title = decrypted.title,
-                            content = decrypted.content,
-                            tags = decrypted.tags,
-                            imageUrls = decrypted.imageUrls,
-                            secretKey = currentVaultKey
-                        )
-                        finalEncData = reEnc.encryptedData
-                        finalIv = reEnc.iv
-                        finalTitle = decrypted.title
-                        finalContent = decrypted.content
-                        finalTags = decrypted.tags
-                        finalImages = decrypted.imageUrls
-                    } else {
-                        finalEncData = encData
-                        finalIv = iv
-                        finalTitle = decrypted.title
-                        finalContent = decrypted.content
-                        finalTags = decrypted.tags
-                        finalImages = decrypted.imageUrls
-                    }
-
                     val vaultNote = Note(
                         id = vObj.optString("id", java.util.UUID.randomUUID().toString()),
-                        title = finalTitle,
-                        content = finalContent,
+                        title = decrypted.title,
+                        content = decrypted.content,
                         colorHex = vObj.optString("colorHex", "#DEFAULT"),
                         isPinned = vObj.optBoolean("isPinned", false),
                         isArchived = vObj.optBoolean("isArchived", false),
                         isLocked = true,
                         isTrash = vObj.optBoolean("isTrash", false),
-                        tags = finalTags,
-                        imageUrls = finalImages,
+                        tags = decrypted.tags,
+                        imageUrls = decrypted.imageUrls,
                         createdAt = vObj.optLong("createdAt", System.currentTimeMillis()),
                         updatedAt = System.currentTimeMillis(),
-                        encryptedData = finalEncData,
-                        iv = finalIv,
                         isSynced = false
                     )
                     importedNotes.add(vaultNote)
