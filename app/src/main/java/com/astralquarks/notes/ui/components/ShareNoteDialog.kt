@@ -317,7 +317,7 @@ fun ShareNoteDialog(
                 }
             }
         },
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(32.dp)
     )
 }
 

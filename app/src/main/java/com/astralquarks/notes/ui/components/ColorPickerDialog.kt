@@ -57,7 +57,7 @@ fun ColorPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(32.dp),
         icon = {
             Icon(
                 imageVector = Icons.Default.Palette,

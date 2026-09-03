@@ -93,7 +93,7 @@ fun ImageUrlDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isUploading) onDismiss() },
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(32.dp),
         icon = {
             Icon(
                 imageVector = Icons.Default.Image,

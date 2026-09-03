@@ -106,7 +106,7 @@ fun VaultAuthDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(32.dp),
         icon = {
             Surface(
                 shape = RoundedCornerShape(16.dp),

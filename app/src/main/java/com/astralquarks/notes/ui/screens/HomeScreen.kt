@@ -3,6 +3,11 @@ package com.astralquarks.notes.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -119,6 +124,14 @@ fun HomeScreen(
     var noteForColorPicker by remember { mutableStateOf<Note?>(null) }
     var noteToShare by remember { mutableStateOf<Note?>(null) }
     var isExportingShare by remember { mutableStateOf(false) }
+
+    val fabInteractionSource = remember { MutableInteractionSource() }
+    val isFabPressed by fabInteractionSource.collectIsPressedAsState()
+    val fabScale by animateFloatAsState(
+        targetValue = if (isFabPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        label = "fab_scale"
+    )
     var shareStatusText by remember { mutableStateOf<String?>(null) }
     var showImageDialogForQuickNote by remember { mutableStateOf(false) }
     var showCreateActionSheet by remember { mutableStateOf(false) }
@@ -288,7 +301,7 @@ fun HomeScreen(
             ) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
+                    shape = RoundedCornerShape(32.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     tonalElevation = 6.dp,
                     shadowElevation = 4.dp
@@ -371,7 +384,8 @@ fun HomeScreen(
                             // Material 3 Expressive Add FAB
                             FloatingActionButton(
                                 onClick = { showCreateActionSheet = true },
-                                shape = RoundedCornerShape(24.dp),
+                                interactionSource = fabInteractionSource,
+                                shape = RoundedCornerShape(32.dp),
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                 elevation = FloatingActionButtonDefaults.elevation(
@@ -381,6 +395,10 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .size(56.dp)
                                     .testTag("fab_create_note")
+                                    .graphicsLayer {
+                                        scaleX = fabScale
+                                        scaleY = fabScale
+                                    }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
@@ -615,7 +633,7 @@ fun HomeScreen(
     if (showCreateActionSheet) {
         ModalBottomSheet(
             onDismissRequest = { showCreateActionSheet = false },
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
