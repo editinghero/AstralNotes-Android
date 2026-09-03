@@ -3,12 +3,12 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDhQdXCl02D6E1WjKKZz3IdC7UVsqsGMcU",
+  apiKey: "AIzaSyCvmF3AnMUNP_XVBgMxzLZVrXd9iWv2Aog",
   authDomain: "astralnotes-android.firebaseapp.com",
   projectId: "astralnotes-android",
   storageBucket: "astralnotes-android.firebasestorage.app",
   messagingSenderId: "173977964592",
-  appId: "1:173977964592:web:astralnotes-client"
+  appId: "1:173977964592:web:5832a7c64b191d501b5df5"
 };
 
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
