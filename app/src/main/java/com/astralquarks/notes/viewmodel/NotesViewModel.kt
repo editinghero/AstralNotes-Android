@@ -251,4 +251,16 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
             repository.clearChatMessages(noteId)
         }
     }
+
+    suspend fun getAllNotesForBackup(): List<com.astralquarks.notes.model.Note> {
+        return repository.getAllNotes()
+    }
+
+    fun importNotesBatch(notes: List<com.astralquarks.notes.model.Note>, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.importNotesBatch(notes)
+            QuickNoteWidgetProvider.updateAllWidgets(application)
+            onComplete()
+        }
+    }
 }

@@ -567,7 +567,7 @@ fun HomeScreen(
     if (noteToShare != null) {
         val target = noteToShare!!
         ShareNoteDialog(
-            noteTitle = target.title,
+            note = target,
             isExporting = isExportingShare,
             exportStatus = shareStatusText,
             onSelectFormat = { format ->

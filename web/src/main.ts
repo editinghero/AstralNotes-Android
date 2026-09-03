@@ -16,6 +16,7 @@ import {
   exportAsPdf
 } from './share';
 import { vaultManager } from './vault';
+import { exportLibrary, importLibrary, inspectBackup } from './backup';
 
 const NOTE_COLORS = [
   { name: 'Default', hex: '#DEFAULT' },
@@ -151,6 +152,10 @@ class AstralNotesApp {
           <li class="nav-item ${this.currentDestination === 'ANALYTICS' ? 'active' : ''}" data-dest="ANALYTICS">
             ${getIconSvg('analytics', 18)}
             <span>Analytics & Shares</span>
+          </li>
+          <li class="nav-item ${this.currentDestination === 'BACKUP' ? 'active' : ''}" data-dest="BACKUP">
+            ${getIconSvg('download', 18)}
+            <span>Backup & Restore</span>
           </li>
 
           <div class="nav-section-title">Tags</div>
@@ -475,6 +480,11 @@ class AstralNotesApp {
 
     if (this.currentDestination === 'ANALYTICS') {
       this.renderAnalyticsView(container);
+      return;
+    }
+
+    if (this.currentDestination === 'BACKUP') {
+      this.renderBackupView(container);
       return;
     }
 
@@ -1547,6 +1557,219 @@ class AstralNotesApp {
         }
       });
     });
+  }
+
+  private renderBackupView(container: HTMLElement): void {
+    container.innerHTML = `
+      <div class="analytics-view">
+        <div class="analytics-header">
+          <h2>Library Backup & Restore</h2>
+          <p>Export your full notes database to a JSON backup, or restore a backup created on Android or Web.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+          <div class="analytics-card" style="padding: 1.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.85rem;">
+              <div style="padding: 0.6rem; border-radius: 12px; background: rgba(99, 102, 241, 0.15); color: #6366f1;">
+                ${getIconSvg('download', 24)}
+              </div>
+              <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0; color: var(--text-ink);">Export Full Library</h3>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
+              Download a complete structured JSON backup of all your notes, checklists, tags, and colors. If you have locked vault notes, you will be prompted for your vault password to decrypt and package them into the backup.
+            </p>
+            <button class="btn btn-primary" id="btn-export-backup" style="width: 100%; justify-content: center; padding: 12px;">
+              ${getIconSvg('download', 18)}
+              <span>Export Library (.json)</span>
+            </button>
+          </div>
+
+          <div class="analytics-card" style="padding: 1.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.85rem;">
+              <div style="padding: 0.6rem; border-radius: 12px; background: rgba(16, 185, 129, 0.15); color: #10b981;">
+                ${getIconSvg('upload', 24)}
+              </div>
+              <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0; color: var(--text-ink);">Import Full Library</h3>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
+              Restore an AstralNotes backup file (.json) from your computer or phone. If the backup contains vault notes, you will be asked for the vault password of the imported file to decrypt and restore them into your library.
+            </p>
+            <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" />
+            <button class="btn btn-secondary" id="btn-import-backup" style="width: 100%; justify-content: center; padding: 12px;">
+              ${getIconSvg('upload', 18)}
+              <span>Select Backup File to Import</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-export-backup')?.addEventListener('click', async () => {
+      const allNotes: Note[] = await getLocalNotes();
+      const hasVaultNotes = allNotes.some((n: Note) => n.isLocked);
+
+      if (hasVaultNotes) {
+        this.showPromptModal({
+          title: 'Vault Password Required',
+          message: 'Your library contains locked vault notes. Enter your current vault password to decrypt and securely package them into the backup file:',
+          isPassword: true,
+          confirmLabel: 'Export Backup',
+          onConfirm: async (password) => {
+            if (!password || !password.trim()) {
+              this.showToast('Vault password is required for export');
+              return;
+            }
+            try {
+              const count = await exportLibrary(password);
+              this.showToast(`Successfully exported ${count} notes to backup file!`);
+            } catch (err: any) {
+              this.showToast(`Export failed: ${err.message}`);
+            }
+          }
+        });
+      } else {
+        try {
+          const count = await exportLibrary();
+          this.showToast(`Successfully exported ${count} notes to backup file!`);
+        } catch (err: any) {
+          this.showToast(`Export failed: ${err.message}`);
+        }
+      }
+    });
+
+    const fileInput = document.getElementById('backup-file-input') as HTMLInputElement;
+    document.getElementById('btn-import-backup')?.addEventListener('click', () => {
+      if (fileInput) {
+        fileInput.value = '';
+        fileInput.click();
+      }
+    });
+
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const inspection = inspectBackup(text);
+
+        if (inspection.vaultCount > 0) {
+          this.showPromptModal({
+            title: 'Imported File Vault Password',
+            message: `This backup contains ${inspection.vaultCount} locked vault notes. Enter the vault password of the imported backup file to unlock and restore them:`,
+            isPassword: true,
+            confirmLabel: 'Unlock & Import',
+            onConfirm: async (importedPassword) => {
+              if (!importedPassword || !importedPassword.trim()) {
+                this.showToast('Password is required for imported vault notes');
+                return;
+              }
+              try {
+                const res = await importLibrary(text, importedPassword);
+                this.notes = await getLocalNotes();
+                this.render();
+                this.showToast(`Imported ${res.regularImported} regular notes and ${res.vaultImported} vault notes!`);
+              } catch (err: any) {
+                this.showToast(`Import failed: ${err.message}`);
+              }
+            }
+          });
+        } else {
+          const res = await importLibrary(text);
+          this.notes = await getLocalNotes();
+          this.render();
+          this.showToast(`Imported ${res.regularImported} notes successfully!`);
+        }
+      } catch (err: any) {
+        this.showToast(`Failed to parse backup file: ${(err as Error).message}`);
+      }
+    });
+  }
+
+  private showPromptModal(options: {
+    title: string;
+    message: string;
+    isPassword?: boolean;
+    confirmLabel?: string;
+    onConfirm: (val: string) => void | Promise<void>;
+  }): void {
+    const mount = document.getElementById('modal-mount');
+    if (!mount) return;
+
+    mount.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card" style="max-width: 440px;">
+          <div class="modal-header">
+            <h3>${options.title}</h3>
+            <button class="btn-icon" id="prompt-modal-close">${getIconSvg('close', 18)}</button>
+          </div>
+          <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5;">${options.message}</p>
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <input type="${options.isPassword ? 'password' : 'text'}" id="prompt-modal-input" class="form-input" style="width: 100%;" placeholder="Enter password..." />
+          </div>
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+            <button class="btn btn-secondary" id="prompt-modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="prompt-modal-confirm">${options.confirmLabel || 'Confirm'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const close = () => this.closeModal();
+    document.getElementById('prompt-modal-close')?.addEventListener('click', close);
+    document.getElementById('prompt-modal-cancel')?.addEventListener('click', close);
+    const input = document.getElementById('prompt-modal-input') as HTMLInputElement;
+    input?.focus();
+
+    document.getElementById('prompt-modal-confirm')?.addEventListener('click', async () => {
+      const val = input ? input.value : '';
+      close();
+      await options.onConfirm(val);
+    });
+
+    input?.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        const val = input.value;
+        close();
+        await options.onConfirm(val);
+      }
+    });
+  }
+
+  private showToast(msg: string): void {
+    let toast = document.getElementById('app-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'app-toast';
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--bg-surface);
+        color: var(--text-ink);
+        border: 1px solid var(--border-active);
+        border-radius: var(--radius-md);
+        padding: 12px 20px;
+        box-shadow: var(--shadow-glass);
+        font-size: 0.9rem;
+        font-weight: 600;
+        z-index: 10000;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        opacity: 0;
+        transform: translateY(10px);
+        pointer-events: none;
+      `;
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    setTimeout(() => {
+      if (toast) {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+      }
+    }, 3500);
   }
 
   private closeModal(): void {

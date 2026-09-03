@@ -1,6 +1,6 @@
 export type SyncStatus = 'SYNCED' | 'SYNCING' | 'OFFLINE_PENDING' | 'ERROR';
 
-export type DrawerDestination = 'NOTES' | 'PINNED' | 'VAULT' | 'ARCHIVE' | 'TRASH' | 'ANALYTICS';
+export type DrawerDestination = 'NOTES' | 'PINNED' | 'VAULT' | 'ARCHIVE' | 'TRASH' | 'ANALYTICS' | 'BACKUP';
 
 export interface Note {
   id: string;

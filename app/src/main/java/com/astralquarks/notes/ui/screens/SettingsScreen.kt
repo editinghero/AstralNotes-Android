@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,10 +27,14 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,6 +54,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.astralquarks.notes.model.Note
+import com.astralquarks.notes.util.LibraryBackupManager
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -86,6 +95,8 @@ fun SettingsScreen(
     onOpenDrawer: () -> Unit,
     onManualSync: () -> Unit,
     onTriggerBiometric: (onSuccess: () -> Unit) -> Unit,
+    onGetAllNotesForBackup: suspend () -> List<Note>,
+    onImportNotesBatch: (List<Note>, () -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -105,6 +116,70 @@ fun SettingsScreen(
     var isSearchGrounding by remember { mutableStateOf(geminiManager.isSearchGroundingEnabled) }
 
     var isSigningIn by remember { mutableStateOf(false) }
+
+    var showExportVaultPasswordDialog by remember { mutableStateOf(false) }
+    var exportVaultPassword by remember { mutableStateOf("") }
+    var pendingExportNotes by remember { mutableStateOf<List<Note>?>(null) }
+    var showImportVaultPasswordDialog by remember { mutableStateOf(false) }
+    var importVaultPassword by remember { mutableStateOf("") }
+    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isProcessingBackup by remember { mutableStateOf(false) }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null && pendingExportNotes != null) {
+            isProcessingBackup = true
+            scope.launch {
+                val res = LibraryBackupManager.exportLibrary(
+                    context = context,
+                    allNotes = pendingExportNotes!!,
+                    vaultKey = vaultSecurityManager.getVaultKey(),
+                    exportVaultPassword = exportVaultPassword.ifBlank { null },
+                    destinationUri = uri
+                )
+                isProcessingBackup = false
+                pendingExportNotes = null
+                exportVaultPassword = ""
+                res.onSuccess { count ->
+                    Toast.makeText(context, "Exported $count notes to backup", Toast.LENGTH_LONG).show()
+                }.onFailure { err ->
+                    Toast.makeText(context, "Export failed: ${err.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            isProcessingBackup = true
+            scope.launch {
+                val inspection = LibraryBackupManager.inspectBackup(context, uri)
+                isProcessingBackup = false
+                inspection.onSuccess { (_, vaultCount) ->
+                    if (vaultCount > 0) {
+                        pendingImportUri = uri
+                        showImportVaultPasswordDialog = true
+                    } else {
+                        isProcessingBackup = true
+                        val importRes = LibraryBackupManager.importLibrary(context, uri, null, null)
+                        isProcessingBackup = false
+                        importRes.onSuccess { result ->
+                            onImportNotesBatch(result.importedNotes) {
+                                Toast.makeText(context, "Imported ${result.regularNotesImported} notes", Toast.LENGTH_LONG).show()
+                            }
+                        }.onFailure { err ->
+                            Toast.makeText(context, "Import failed: ${err.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.onFailure { err ->
+                    Toast.makeText(context, "Cannot read backup: ${err.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -611,8 +686,226 @@ fun SettingsScreen(
                 }
             }
 
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Library Backup & Restore",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    Text(
+                        text = "Export your entire notes database to a JSON backup file, or restore a backup created on Android or Web. Vault notes are protected with your vault password.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isProcessingBackup) return@Button
+                                scope.launch {
+                                    val notes = onGetAllNotesForBackup()
+                                    pendingExportNotes = notes
+                                    val hasVault = notes.any { it.isLocked }
+                                    if (hasVault) {
+                                        showExportVaultPasswordDialog = true
+                                    } else {
+                                        createDocumentLauncher.launch("astral_backup_${System.currentTimeMillis()}.json")
+                                    }
+                                }
+                            },
+                            enabled = !isProcessingBackup,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isProcessingBackup) return@OutlinedButton
+                                openDocumentLauncher.launch(arrayOf("application/json", "*/*"))
+                            },
+                            enabled = !isProcessingBackup,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Import")
+                        }
+                    }
+
+                    if (isProcessingBackup) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text("Processing backup...", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showExportVaultPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showExportVaultPasswordDialog = false
+                pendingExportNotes = null
+                exportVaultPassword = ""
+            },
+            title = { Text("Vault Password Required") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Your library contains locked vault notes. Enter your current vault password to securely encrypt them in the backup file.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                    OutlinedTextField(
+                        value = exportVaultPassword,
+                        onValueChange = { exportVaultPassword = it },
+                        label = { Text("Vault Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (exportVaultPassword.isBlank()) {
+                            Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        showExportVaultPasswordDialog = false
+                        createDocumentLauncher.launch("astral_backup_${System.currentTimeMillis()}.json")
+                    }
+                ) {
+                    Text("Proceed to Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showExportVaultPasswordDialog = false
+                        pendingExportNotes = null
+                        exportVaultPassword = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    if (showImportVaultPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportVaultPasswordDialog = false
+                pendingImportUri = null
+                importVaultPassword = ""
+            },
+            title = { Text("Imported Vault Password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This backup file contains private vault notes. Enter the vault password used when this backup file was exported.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                    OutlinedTextField(
+                        value = importVaultPassword,
+                        onValueChange = { importVaultPassword = it },
+                        label = { Text("Imported File Vault Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (importVaultPassword.isBlank()) {
+                            Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        val uri = pendingImportUri
+                        val pass = importVaultPassword
+                        showImportVaultPasswordDialog = false
+                        pendingImportUri = null
+                        importVaultPassword = ""
+
+                        if (uri != null) {
+                            isProcessingBackup = true
+                            scope.launch {
+                                val importRes = LibraryBackupManager.importLibrary(
+                                    context = context,
+                                    uri = uri,
+                                    importedVaultPassword = pass,
+                                    currentVaultKey = vaultSecurityManager.getVaultKey()
+                                )
+                                isProcessingBackup = false
+                                importRes.onSuccess { result ->
+                                    onImportNotesBatch(result.importedNotes) {
+                                        Toast.makeText(
+                                            context,
+                                            "Imported ${result.regularNotesImported} regular notes and ${result.vaultNotesImported} vault notes",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }.onFailure { err ->
+                                    Toast.makeText(context, "Import failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Unlock & Import")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showImportVaultPasswordDialog = false
+                        pendingImportUri = null
+                        importVaultPassword = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 
     if (showPasswordChangeDialog) {

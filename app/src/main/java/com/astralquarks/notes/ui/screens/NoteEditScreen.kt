@@ -701,7 +701,7 @@ fun NoteEditScreen(
             updatedAt = System.currentTimeMillis()
         )
         ShareNoteDialog(
-            noteTitle = currentSnapshot.title,
+            note = currentSnapshot,
             isExporting = isExportingShare,
             exportStatus = shareStatusText,
             onSelectFormat = { format ->

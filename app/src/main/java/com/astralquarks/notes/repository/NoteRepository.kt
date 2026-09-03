@@ -42,6 +42,18 @@ class NoteRepository(
         }
     }
 
+    suspend fun importNotesBatch(notes: List<Note>) {
+        if (notes.isEmpty()) return
+        noteDao.insertNotes(notes)
+        if (authManager.isSignedIn) {
+            repositoryScope.launch {
+                for (note in notes) {
+                    authManager.uploadNoteToFirestore(note)
+                }
+            }
+        }
+    }
+
     suspend fun togglePin(note: Note) {
         val updated = note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis())
         saveNote(updated)

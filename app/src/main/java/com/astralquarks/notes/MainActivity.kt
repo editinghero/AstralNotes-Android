@@ -374,7 +374,9 @@ fun MainAppContent(
                                     Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
                                 }
                             )
-                        }
+                        },
+                        onGetAllNotesForBackup = { viewModel.getAllNotesForBackup() },
+                        onImportNotesBatch = { notes, onComplete -> viewModel.importNotesBatch(notes, onComplete) }
                     )
                 }
             }

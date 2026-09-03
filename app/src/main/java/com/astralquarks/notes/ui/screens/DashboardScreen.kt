@@ -21,28 +21,51 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import com.astralquarks.notes.util.WebShareItem
+import com.astralquarks.notes.util.WebShareManager
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.unit.dp
 import com.astralquarks.notes.model.Note
 import com.astralquarks.notes.ui.components.NoteCard
@@ -242,6 +265,126 @@ fun DashboardScreen(
                                         ),
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isSignedIn) {
+                var sharesList by remember { mutableStateOf<List<WebShareItem>>(emptyList()) }
+                var isLoadingShares by remember { mutableStateOf(true) }
+                val scope = rememberCoroutineScope()
+                val context = LocalContext.current
+
+                LaunchedEffect(Unit) {
+                    sharesList = WebShareManager.getUserShares()
+                    isLoadingShares = false
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Shared Web Links",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "${sharesList.size}",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (isLoadingShares) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                } else if (sharesList.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "No active web share links. Use the Share button on any note to generate web links.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        sharesList.forEach { share ->
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (share.isPasswordProtected) Icons.Default.Lock else Icons.Default.Public,
+                                        contentDescription = null,
+                                        tint = if (share.isPasswordProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = share.title,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            maxLines = 1
+                                        )
+                                        val isExpired = share.expiresAt != null && System.currentTimeMillis() > share.expiresAt
+                                        val expiryLabel = if (share.expiresAt != null) {
+                                            if (isExpired) "Expired" else "Expires ${SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(share.expiresAt))}"
+                                        } else {
+                                            "Never expires"
+                                        }
+                                        Text(
+                                            text = "${if (share.isPasswordProtected) "Password Protected" else "Public"} • $expiryLabel",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                color = if (isExpired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("Share Link", share.shareUrl))
+                                            Toast.makeText(context, "Link copied", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val success = WebShareManager.revokeShare(share.shareId)
+                                                if (success) {
+                                                    sharesList = WebShareManager.getUserShares()
+                                                    Toast.makeText(context, "Link revoked", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Revoke", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
