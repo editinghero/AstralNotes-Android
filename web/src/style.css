@@ -1053,6 +1053,29 @@ body {
 }
 
 @media (max-width: 820px) {
+
+  .top-bar {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .search-container {
+    order: 3;
+    min-width: 100%;
+  }
+  .top-actions {
+    margin-left: auto;
+  }
+  .top-actions .btn span {
+    display: none;
+  }
+  .top-actions #new-note-btn {
+    display: none;
+  }
+  .notes-grid {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;
@@ -1074,5 +1097,14 @@ body {
   }
   .analytics-view {
     padding: 20px 16px;
+  }
+  .mobile-bottom-dock {
+    display: flex;
+  }
+}
+
+@media (min-width: 821px) {
+  .mobile-bottom-dock {
+    display: none !important;
   }
 }
