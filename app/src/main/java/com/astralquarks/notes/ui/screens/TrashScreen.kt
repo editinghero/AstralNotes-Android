@@ -155,16 +155,17 @@ fun TrashScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalItemSpacing = 10.dp
-                ) {
-                    items(trashNotes, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            onClick = { /* No editing trashed notes */ },
-                            onRestoreFromTrash = { onRestoreNote(note) },
-                            onPermanentlyDelete = { onPermanentlyDelete(note) },
-                            isTrashSection = true
-                        )
+                        verticalItemSpacing = 10.dp
+                    ) {
+                        items(trashNotes, key = { it.id }) { note ->
+                            NoteCard(
+                                note = note,
+                                onClick = { /* No editing trashed notes */ },
+                                onRestoreFromTrash = { onRestoreNote(note) },
+                                onPermanentlyDelete = { onPermanentlyDelete(note) },
+                                isTrashSection = true
+                            )
+                        }
                     }
                 }
             }
