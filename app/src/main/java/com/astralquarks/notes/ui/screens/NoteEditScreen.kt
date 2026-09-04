@@ -119,6 +119,7 @@ import java.util.Locale
 fun NoteEditScreen(
     noteId: String?,
     initialContent: String = "",
+    isFromVault: Boolean = false,
     allExistingTags: List<String> = emptyList(),
     persistedMessages: List<AiChatMessageEntity> = emptyList(),
     onSaveChatMessage: ((isUser: Boolean, text: String) -> Unit)? = null,
@@ -139,7 +140,8 @@ fun NoteEditScreen(
                 id = noteId ?: java.util.UUID.randomUUID().toString(),
                 title = "",
                 content = initialContent,
-                colorHex = "#DEFAULT"
+                colorHex = "#DEFAULT",
+                isLocked = isFromVault
             )
         )
     }
