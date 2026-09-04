@@ -29,7 +29,7 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:text="AstralNotes"
-            android:textColor="#1D1B20"
+            android:textColor="@color/widget_title_color"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Quick Note"
-            android:textColor="#49454F"
+            android:textColor="@color/widget_subtitle_color"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -75,7 +75,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:text="Note"
-                android:textColor="#21005D"
+                android:textColor="@color/widget_button_text_color"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -105,7 +105,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:text="List"
-                android:textColor="#21005D"
+                android:textColor="@color/widget_button_text_color"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -135,7 +135,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:text="Image"
-                android:textColor="#21005D"
+                android:textColor="@color/widget_button_text_color"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -164,7 +164,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:text="AI"
-                android:textColor="#21005D"
+                android:textColor="@color/widget_button_text_color"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -177,7 +177,7 @@
         android:layout_height="0dp"
         android:layout_marginTop="10dp"
         android:layout_weight="1"
-        android:background="#FFFFFF"
+        android:background="@drawable/widget_recent_background"
         android:clickable="true"
         android:focusable="true"
         android:gravity="center_vertical"
@@ -191,7 +191,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:text="Tap any button above to create a note"
-            android:textColor="#1D1B20"
+            android:textColor="@color/widget_title_color"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -201,9 +201,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:ellipsize="end"
-            android:maxLines="2"
+            android:maxLines="4"
             android:text="Supports full Markdown, interactive checkboxes, URL images, and Gemini AI."
-            android:textColor="#49454F"
+            android:textColor="@color/widget_subtitle_color"
             android:textSize="12sp" />
     </LinearLayout>
 
