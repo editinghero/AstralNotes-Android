@@ -179,7 +179,7 @@ class VaultManager {
         'raw',
         unwrappedVmkBuffer,
         { name: 'AES-GCM', length: 256 },
-        false,
+        true,
         ['encrypt', 'decrypt']
       );
 
@@ -205,6 +205,118 @@ class VaultManager {
     } catch {
       throw new Error('Incorrect vault password. Please try again.');
     }
+  }
+
+  public async changeVaultPassword(oldPassword: string, newPassword: string): Promise<boolean> {
+    let config: VaultMetaConfig | null = null;
+    const user = auth.currentUser;
+
+    if (user) {
+      try {
+        const docRef = doc(db, 'user', user.uid, 'vault_meta', 'config');
+        const snapshot = await getDoc(docRef);
+        if (snapshot.exists()) {
+          config = snapshot.data() as VaultMetaConfig;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch remote vault config:', e);
+      }
+    }
+
+    if (!config) {
+      const offlineJson = await getMetaValue(user ? `vault_config_${user.uid}` : 'vault_config_offline');
+      if (offlineJson) {
+        config = JSON.parse(offlineJson) as VaultMetaConfig;
+      }
+    }
+
+    if (!config || !config.wrappedVmk || !config.kdfSalt) {
+      throw new Error('No existing vault found. Please create one first.');
+    }
+
+    const oldSalt = base64ToBuffer(config.kdfSalt);
+    const oldKek = await deriveKey(oldPassword, oldSalt);
+
+    const wrappedVmkBytes = base64ToBuffer(config.wrappedVmk);
+    const wrappedVmkIvBytes = base64ToBuffer(config.wrappedVmkIv);
+
+    let unwrappedVmkBuffer: ArrayBuffer;
+    let vmk: CryptoKey;
+    try {
+      unwrappedVmkBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: wrappedVmkIvBytes as BufferSource, tagLength: 128 },
+        oldKek,
+        wrappedVmkBytes as BufferSource
+      );
+
+      vmk = await crypto.subtle.importKey(
+        'raw',
+        unwrappedVmkBuffer,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+
+      const verifierBytes = base64ToBuffer(config.verifier);
+      const verifierIvBytes = base64ToBuffer(config.verifierIv);
+      const decryptedVerifierBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: verifierIvBytes as BufferSource, tagLength: 128 },
+        vmk,
+        verifierBytes as BufferSource
+      );
+
+      const dec = new TextDecoder();
+      if (dec.decode(decryptedVerifierBuffer) !== VERIFY_TOKEN) {
+        throw new Error('Incorrect old vault password.');
+      }
+    } catch {
+      throw new Error('Incorrect old vault password. Please try again.');
+    }
+
+    const newSalt = generateSalt(16);
+    const newKek = await deriveKey(newPassword, newSalt);
+
+    const newVmkIv = new Uint8Array(12);
+    crypto.getRandomValues(newVmkIv);
+    const newWrappedVmkBuffer = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: newVmkIv, tagLength: 128 },
+      newKek,
+      unwrappedVmkBuffer
+    );
+
+    const enc = new TextEncoder();
+    const newVerifierIv = new Uint8Array(12);
+    crypto.getRandomValues(newVerifierIv);
+    const newVerifierBuffer = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: newVerifierIv, tagLength: 128 },
+      vmk,
+      enc.encode(VERIFY_TOKEN)
+    );
+
+    const newConfig: VaultMetaConfig = {
+      version: 1,
+      kdfSalt: bufferToBase64(newSalt),
+      kdfIterations: 100000,
+      wrappedVmk: bufferToBase64(newWrappedVmkBuffer),
+      wrappedVmkIv: bufferToBase64(newVmkIv),
+      verifier: bufferToBase64(newVerifierBuffer),
+      verifierIv: bufferToBase64(newVerifierIv),
+      updatedAt: Date.now()
+    };
+
+    if (user) {
+      const docRef = doc(db, 'user', user.uid, 'vault_meta', 'config');
+      await setDoc(docRef, newConfig, { merge: true });
+      await setMetaValue(`has_vault_${user.uid}`, 'true');
+    } else {
+      await setMetaValue('vault_config_offline', JSON.stringify(newConfig));
+      await setMetaValue('has_vault_offline', 'true');
+    }
+
+    this.inMemoryVaultKey = vmk;
+    this.isVaultUnlocked = true;
+    await this.notifyListeners();
+    return true;
   }
 
   public lockVault(): void {

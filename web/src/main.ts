@@ -20,11 +20,48 @@ import { exportLibrary, importLibrary, inspectBackup } from './backup';
 
 type ThemeId = 'peach' | 'mauve' | 'teal' | 'sky';
 
-const THEMES: Array<{ id: ThemeId; name: string; gradient: string }> = [
-  { id: 'peach', name: 'Peach', gradient: 'linear-gradient(135deg, #f0788a 0 50%, #fff3e0 50% 100%)' },
-  { id: 'mauve', name: 'Mauve', gradient: 'linear-gradient(135deg, #cba6f7 0 50%, #f5b78f 50% 100%)' },
-  { id: 'teal', name: 'Teal', gradient: 'linear-gradient(135deg, #8fe0d2 0 50%, #f2a3b3 50% 100%)' },
-  { id: 'sky', name: 'Sky', gradient: 'linear-gradient(135deg, #9dc4ff 0 50%, #c4b0f5 50% 100%)' }
+interface ThemeMeta {
+  id: ThemeId;
+  name: string;
+  primary: string;
+  accent: string;
+  bgDark: string;
+  preview: string;
+}
+
+const THEMES: ThemeMeta[] = [
+  {
+    id: 'peach',
+    name: 'Peach',
+    primary: '#f0788a',
+    accent: '#fde8cf',
+    bgDark: '#1e1517',
+    preview: 'linear-gradient(to right, #f0788a 50%, #fde8cf 50%)'
+  },
+  {
+    id: 'mauve',
+    name: 'Mauve',
+    primary: '#cba6f7',
+    accent: '#f5b78f',
+    bgDark: '#181524',
+    preview: 'linear-gradient(to right, #cba6f7 50%, #f5b78f 50%)'
+  },
+  {
+    id: 'teal',
+    name: 'Teal',
+    primary: '#7ee0c8',
+    accent: '#f2a3b3',
+    bgDark: '#141c1b',
+    preview: 'linear-gradient(to right, #7ee0c8 50%, #f2a3b3 50%)'
+  },
+  {
+    id: 'sky',
+    name: 'Sky',
+    primary: '#9dc4ff',
+    accent: '#c4b0f5',
+    bgDark: '#131724',
+    preview: 'linear-gradient(to right, #9dc4ff 50%, #c4b0f5 50%)'
+  }
 ];
 
 const NOTE_COLORS = [
@@ -45,16 +82,17 @@ class AstralNotesApp {
   private currentDestination: DrawerDestination = 'NOTES';
   private selectedTag: string | null = null;
   private searchQuery = '';
+  private currentTheme: ThemeId = 'peach';
   private isGridView = true;
   private currentUser: User | null = null;
   private activeNote: Note | null = null;
   private editorMode: 'edit' | 'preview' = 'edit';
-  private currentTheme: ThemeId = 'peach';
-
   private appEl: HTMLElement;
 
   constructor() {
-    this.appEl = document.getElementById('app')!;
+    const el = document.getElementById('app');
+    if (!el) throw new Error('Root #app element not found');
+    this.appEl = el;
     this.initTheme();
     this.init();
   }
@@ -67,6 +105,7 @@ class AstralNotesApp {
       this.currentTheme = 'peach';
     }
     document.documentElement.setAttribute('data-theme', this.currentTheme);
+    this.updateThemeMetaAndFavicon(this.currentTheme);
   }
 
   private setTheme(theme: ThemeId): void {
@@ -74,6 +113,22 @@ class AstralNotesApp {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('cn:theme', theme);
     this.updateThemeButtons();
+    this.updateThemeMetaAndFavicon(theme);
+  }
+
+  private updateThemeMetaAndFavicon(themeId: ThemeId): void {
+    const theme = THEMES.find(t => t.id === themeId) || THEMES[0];
+
+    const metaThemeColor = document.getElementById('theme-color-meta') as HTMLMetaElement | null;
+    if (metaThemeColor) {
+      metaThemeColor.content = theme.primary;
+    }
+
+    const favicon = document.getElementById('app-favicon') as HTMLLinkElement | null;
+    if (favicon) {
+      const encodedColor = encodeURIComponent(theme.primary);
+      favicon.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='64' height='64' fill='none' stroke='${encodedColor}' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(1.2, 1.2) scale(0.9)'%3E%3Cpath d='M18 2l4 4M2 22l1.276-4.68c.083-.305.125-.458.189-.6.057-.127.126-.247.208-.359.092-.126.204-.238.428-.462L14.434 5.566c.198-.198.297-.297.411-.334.1-.033.209-.033.309 0 .114.037.213.136.411.334l2.869 2.869c.198.198.297-.297.334.411.033.1.033.209 0 .309-.037.114-.136.213-.334.411L8.1 19.899c-.224.224-.336.336-.462.428-.112.082-.232.151-.359.208-.142.064-.295.106-.6.189L2 22z'/%3E%3C/g%3E%3C/svg%3E`;
+    }
   }
 
   private updateThemeButtons(): void {
@@ -284,7 +339,7 @@ class AstralNotesApp {
         <nav class="mobile-bottom-dock">
           <button class="dock-btn dock-btn-primary" id="dock-new-note" title="New Note">
             ${getIconSvg('plus', 16)}
-            <span>New Note</span>
+            <span>New</span>
           </button>
           <button class="dock-btn" id="dock-new-task" title="New Checklist">
             ${getIconSvg('check-square', 16)}
@@ -1925,7 +1980,7 @@ class AstralNotesApp {
             <div class="settings-theme-grid">
               ${THEMES.map(t => `
                 <div class="settings-theme-card ${this.currentTheme === t.id ? 'active' : ''}" data-theme-id="${t.id}">
-                  <div class="settings-theme-preview" style="background: ${t.gradient};"></div>
+                  <div class="settings-theme-preview" style="background: ${t.preview};"></div>
                   <div class="settings-theme-info">
                     <span class="settings-theme-name">${t.name}</span>
                     <span class="settings-theme-badge">Active</span>
@@ -1958,12 +2013,11 @@ class AstralNotesApp {
                     ${getIconSvg('lock', 14)}
                     <span>Relock Vault</span>
                   </button>
-                ` : `
-                  <button class="btn btn-primary" id="settings-open-vault">
-                    ${getIconSvg('unlock', 14)}
-                    <span>Open Vault</span>
-                  </button>
-                `}
+                ` : ''}
+                <button class="btn btn-secondary" id="settings-change-vault-pass">
+                  ${getIconSvg('key', 14)}
+                  <span>Change Vault Password</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1990,10 +2044,116 @@ class AstralNotesApp {
       this.showToast('Private vault relocked');
     });
 
-    document.getElementById('settings-open-vault')?.addEventListener('click', () => {
-      this.closeModal();
-      this.navigateTo('VAULT');
+    document.getElementById('settings-change-vault-pass')?.addEventListener('click', () => {
+      this.openChangeVaultPasswordModal();
     });
+  }
+
+  private openChangeVaultPasswordModal(): void {
+    const mount = document.getElementById('modal-mount');
+    if (!mount) return;
+
+    mount.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card" style="max-width: 460px;">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+              ${getIconSvg('lock', 20)}
+              <span>Change Vault Password</span>
+            </h3>
+            <button class="btn-icon" id="change-pass-close">${getIconSvg('close', 18)}</button>
+          </div>
+
+          <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
+            Enter your current vault password to authenticate, then choose and confirm your new vault password.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">Current Vault Password</label>
+            <input type="password" id="change-pass-old" class="form-input" style="width: 100%;" placeholder="Enter current password..." />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">New Vault Password</label>
+            <input type="password" id="change-pass-new" class="form-input" style="width: 100%;" placeholder="At least 4 characters..." />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Retype New Vault Password</label>
+            <input type="password" id="change-pass-confirm" class="form-input" style="width: 100%;" placeholder="Re-enter new password..." />
+          </div>
+
+          <div id="change-pass-error" style="color: var(--destructive); font-size: 0.88rem; margin-top: 10px; margin-bottom: 14px; font-weight: 600;"></div>
+
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="btn btn-secondary" id="change-pass-cancel">Cancel</button>
+            <button class="btn btn-primary" id="change-pass-submit">
+              ${getIconSvg('check', 16)}
+              <span>Update Password</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const closeBtn = document.getElementById('change-pass-close');
+    const cancelBtn = document.getElementById('change-pass-cancel');
+    const submitBtn = document.getElementById('change-pass-submit') as HTMLButtonElement | null;
+    const oldInput = document.getElementById('change-pass-old') as HTMLInputElement | null;
+    const newInput = document.getElementById('change-pass-new') as HTMLInputElement | null;
+    const confirmInput = document.getElementById('change-pass-confirm') as HTMLInputElement | null;
+    const errorEl = document.getElementById('change-pass-error');
+
+    const handleClose = () => this.openSettingsModal();
+    closeBtn?.addEventListener('click', handleClose);
+    cancelBtn?.addEventListener('click', handleClose);
+
+    const handleSubmit = async () => {
+      if (!oldInput || !newInput || !confirmInput || !errorEl || !submitBtn) return;
+      errorEl.textContent = '';
+
+      const oldPass = oldInput.value.trim();
+      const newPass = newInput.value.trim();
+      const confirmPass = confirmInput.value.trim();
+
+      if (!oldPass) {
+        errorEl.textContent = 'Please enter your current vault password.';
+        oldInput.focus();
+        return;
+      }
+      if (newPass.length < 4) {
+        errorEl.textContent = 'New password must be at least 4 characters.';
+        newInput.focus();
+        return;
+      }
+      if (newPass !== confirmPass) {
+        errorEl.textContent = 'New passwords do not match. Please retype carefully.';
+        confirmInput.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Updating vault encryption...';
+
+      try {
+        await vaultManager.changeVaultPassword(oldPass, newPass);
+        this.closeModal();
+        this.showToast('Vault password changed successfully!');
+      } catch (err) {
+        errorEl.textContent = (err as Error).message || 'Failed to change vault password. Please try again.';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `${getIconSvg('check', 16)} <span>Update Password</span>`;
+      }
+    };
+
+    submitBtn?.addEventListener('click', handleSubmit);
+    [oldInput, newInput, confirmInput].forEach(inp => {
+      inp?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleSubmit();
+      });
+    });
+
+    oldInput?.focus();
   }
 
   private closeModal(): void {

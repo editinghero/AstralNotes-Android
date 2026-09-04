@@ -198,6 +198,92 @@ class VaultSecurityManager(private val context: Context) {
         _isVaultUnlocked.value = true
     }
 
+    suspend fun changePassword(oldPassword: String, newPassword: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            var config = fetchRemoteConfig() ?: fetchLocalConfig()
+            if (config == null) {
+                return@withContext Result.failure(Exception("No vault configuration found."))
+            }
+
+            val oldSalt = Base64.decode(config.kdfSalt, Base64.NO_WRAP)
+            val oldKek = CryptoEngine.deriveKey(oldPassword, oldSalt)
+            val wrappedVmk = Base64.decode(config.wrappedVmk, Base64.NO_WRAP)
+            val wrappedVmkIv = Base64.decode(config.wrappedVmkIv, Base64.NO_WRAP)
+
+            val vmkCipher = Cipher.getInstance("AES/GCM/NoPadding")
+            vmkCipher.init(Cipher.DECRYPT_MODE, oldKek, GCMParameterSpec(128, wrappedVmkIv))
+            val vmkBytes = vmkCipher.doFinal(wrappedVmk)
+            val vmk = SecretKeySpec(vmkBytes, "AES")
+
+            val verifierCiphertext = Base64.decode(config.verifier, Base64.NO_WRAP)
+            val verifierIv = Base64.decode(config.verifierIv, Base64.NO_WRAP)
+            val verifierCipher = Cipher.getInstance("AES/GCM/NoPadding")
+            verifierCipher.init(Cipher.DECRYPT_MODE, vmk, GCMParameterSpec(128, verifierIv))
+            val decryptedTokenBytes = verifierCipher.doFinal(verifierCiphertext)
+            val token = String(decryptedTokenBytes, StandardCharsets.UTF_8)
+            if (token != VERIFY_TOKEN) {
+                return@withContext Result.failure(Exception("Incorrect old vault password."))
+            }
+
+            val newSalt = CryptoEngine.generateSalt()
+            val newKek = CryptoEngine.deriveKey(newPassword, newSalt)
+
+            val newVmkIv = ByteArray(12)
+            secureRandom.nextBytes(newVmkIv)
+            val newVmkCipher = Cipher.getInstance("AES/GCM/NoPadding")
+            newVmkCipher.init(Cipher.ENCRYPT_MODE, newKek, GCMParameterSpec(128, newVmkIv))
+            val newWrappedVmk = newVmkCipher.doFinal(vmkBytes)
+
+            val newVerifierIv = ByteArray(12)
+            secureRandom.nextBytes(newVerifierIv)
+            val newVerifierCipher = Cipher.getInstance("AES/GCM/NoPadding")
+            newVerifierCipher.init(Cipher.ENCRYPT_MODE, vmk, GCMParameterSpec(128, newVerifierIv))
+            val newVerifierCiphertext = newVerifierCipher.doFinal(VERIFY_TOKEN.toByteArray(StandardCharsets.UTF_8))
+
+            val newSaltB64 = Base64.encodeToString(newSalt, Base64.NO_WRAP)
+            val newWrappedVmkB64 = Base64.encodeToString(newWrappedVmk, Base64.NO_WRAP)
+            val newWrappedVmkIvB64 = Base64.encodeToString(newVmkIv, Base64.NO_WRAP)
+            val newVerifierB64 = Base64.encodeToString(newVerifierCiphertext, Base64.NO_WRAP)
+            val newVerifierIvB64 = Base64.encodeToString(newVerifierIv, Base64.NO_WRAP)
+
+            prefs.edit()
+                .putString(KEY_SALT, newSaltB64)
+                .putString(KEY_WRAPPED_VMK, newWrappedVmkB64)
+                .putString(KEY_WRAPPED_VMK_IV, newWrappedVmkIvB64)
+                .putString(KEY_VERIFIER, newVerifierB64)
+                .putString(KEY_VERIFIER_IV, newVerifierIvB64)
+                .putBoolean(KEY_HAS_REMOTE_VAULT, true)
+                .apply()
+
+            val uid = auth.currentUser?.uid
+            if (uid != null) {
+                val map = mapOf(
+                    "version" to 1,
+                    "kdfSalt" to newSaltB64,
+                    "kdfIterations" to 100000,
+                    "wrappedVmk" to newWrappedVmkB64,
+                    "wrappedVmkIv" to newWrappedVmkIvB64,
+                    "verifier" to newVerifierB64,
+                    "verifierIv" to newVerifierIvB64,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                firestore.collection("user")
+                    .document(uid)
+                    .collection("vault_meta")
+                    .document("config")
+                    .set(map, SetOptions.merge())
+                    .await()
+            }
+
+            inMemoryVaultKey = vmk
+            _isVaultUnlocked.value = true
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("VaultSecurityManager", "changePassword failed", e)
+            Result.failure(Exception("Failed to change vault password. Please check your old password."))
+        }
+    }
+
     fun lockVault() {
         inMemoryVaultKey = null
         _isVaultUnlocked.value = false

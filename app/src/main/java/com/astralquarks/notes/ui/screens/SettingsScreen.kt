@@ -106,6 +106,7 @@ fun SettingsScreen(
 
     var showPasswordChangeDialog by remember { mutableStateOf(false) }
     var vaultAuthenticatedForChange by remember { mutableStateOf(false) }
+    var verifiedOldPassword by remember { mutableStateOf("") }
 
     var customApiKey by remember { mutableStateOf(geminiManager.customApiKey) }
     var customModelName by remember { mutableStateOf(geminiManager.customModelName) }
@@ -841,12 +842,24 @@ fun SettingsScreen(
 
     if (showPasswordChangeDialog) {
         if (vaultSecurityManager.isPasswordSet() && !vaultAuthenticatedForChange) {
+            var oldPassAttempt by remember { mutableStateOf("") }
             VaultAuthDialog(
                 isPasswordSet = true,
-                onVerifyPassword = { vaultSecurityManager.verifyPassword(it) },
+                onVerifyPassword = { pass ->
+                    val res = vaultSecurityManager.verifyPassword(pass)
+                    if (res.isSuccess) {
+                        oldPassAttempt = pass
+                    }
+                    res
+                },
                 onSetPassword = { Result.success(Unit) },
-                onDismiss = { showPasswordChangeDialog = false },
+                onDismiss = {
+                    showPasswordChangeDialog = false
+                    vaultAuthenticatedForChange = false
+                    verifiedOldPassword = ""
+                },
                 onSuccess = {
+                    verifiedOldPassword = oldPassAttempt
                     vaultAuthenticatedForChange = true
                 }
             )
@@ -855,10 +868,15 @@ fun SettingsScreen(
                 isPasswordSet = false,
                 onVerifyPassword = { Result.success(true) },
                 onSetPassword = { newPass ->
-                    val res = vaultSecurityManager.setPassword(newPass)
+                    val res = if (vaultSecurityManager.isPasswordSet() && verifiedOldPassword.isNotBlank()) {
+                        vaultSecurityManager.changePassword(verifiedOldPassword, newPass)
+                    } else {
+                        vaultSecurityManager.setupNewVault(newPass)
+                    }
                     if (res.isSuccess) {
                         showPasswordChangeDialog = false
                         vaultAuthenticatedForChange = false
+                        verifiedOldPassword = ""
                         Toast.makeText(context, "Vault password saved successfully", Toast.LENGTH_SHORT).show()
                     }
                     res
@@ -866,6 +884,7 @@ fun SettingsScreen(
                 onDismiss = {
                     showPasswordChangeDialog = false
                     vaultAuthenticatedForChange = false
+                    verifiedOldPassword = ""
                 },
                 onSuccess = { }
             )

@@ -181,6 +181,31 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--primary) 30%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--primary) 28%, var(--border));
+  border-radius: var(--radius-pill);
+  transition: background 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body {
@@ -779,7 +804,7 @@ body {
 
 /* Mobile Bottom Navigation Dock */
 .mobile-bottom-dock {
-  position: fixed;
+  position: absolute;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
@@ -791,7 +816,7 @@ body {
   align-items: center;
   gap: 6px;
   backdrop-filter: blur(20px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), var(--shadow-glow);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   z-index: 40;
 }
 
@@ -808,6 +833,7 @@ body {
   background: transparent;
   border: none;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
@@ -819,7 +845,18 @@ body {
 .dock-btn-primary {
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: var(--shadow-pill);
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .top-bar #new-note-btn,
+  .top-bar #import-btn {
+    display: none;
+  }
+  .dock-btn {
+    padding: 6px 12px;
+    font-size: 0.78rem;
+  }
 }
 
 .empty-state {
@@ -1090,7 +1127,7 @@ body {
   border: 1px solid var(--border-active);
   border-radius: var(--radius-xl);
   padding: 26px;
-  box-shadow: var(--shadow-glass), var(--shadow-glow);
+  box-shadow: var(--shadow-glass);
 }
 
 .modal-header {
@@ -1397,12 +1434,12 @@ body {
 }
 
 .settings-theme-card {
-  background: var(--bg-surface-elevated);
-  border: 1.5px solid var(--border);
+  background: var(--bg-surface);
+  border: 2px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  transition: border-color 0.15s ease, transform 0.12s ease;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1416,15 +1453,16 @@ body {
 
 .settings-theme-card.active {
   border-color: var(--primary);
-  background: color-mix(in oklab, var(--primary) 8%, var(--bg-surface-elevated));
+  background: var(--bg-surface);
 }
 
 .settings-theme-preview {
-  height: 48px;
+  height: 44px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: none;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .settings-theme-info {
