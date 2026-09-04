@@ -267,6 +267,7 @@ fun MainAppContent(
                     NoteEditScreen(
                         noteId = screen.noteId,
                         initialContent = screen.initialContent,
+                        isFromVault = screen.fromVault,
                         allExistingTags = allTags,
                         persistedMessages = noteChatMessages,
                         onSaveChatMessage = { isUser, text -> viewModel.saveChatMessage(screen.noteId, isUser, text) },
@@ -307,10 +308,10 @@ fun MainAppContent(
                         onCreateLockedNote = {
                             val newNote = Note(
                                 id = java.util.UUID.randomUUID().toString(),
-                                title = "Private Locked Note",
-                                content = "# Confidential\n\n- [ ] Private task",
+                                title = "",
+                                content = "",
                                 isLocked = true,
-                                colorHex = "#FFF9C4"
+                                colorHex = "#DEFAULT"
                             )
                             viewModel.saveNote(newNote)
                             currentScreen = Screen.EditNote(newNote.id, fromVault = true)
