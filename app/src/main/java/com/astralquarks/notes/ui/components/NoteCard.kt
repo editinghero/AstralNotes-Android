@@ -241,6 +241,7 @@ fun NoteCard(
                     Spacer(modifier = Modifier.height(4.dp))
                     val plainPreview = remember(displayContent) {
                         displayContent
+                            .take(1000)
                             .replace(STRIP_HEADING, "")
                             .replace(STRIP_BOLD_STAR, "$1")
                             .replace(STRIP_BOLD_UND, "$1")
