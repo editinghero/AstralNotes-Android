@@ -21,23 +21,10 @@
 
 ## How to Migrate to the Latest Version
 
-### Method 1: Automatic Full Library Migration (Recommended)
-
-1. **In your current app:**  
-   Open **Settings > Library Backup & Restore**.
-2. **Export your library:**  
-   Tap **Export Backup**. If you have locked notes, enter your vault password when prompted, then save the `.json` backup file to your device or Google Drive.
-3. **Install the new version:**  
+### Method: Manual Note-by-Note Export
+**Install the new version:**  
    Download and install the latest APK from [GitHub Releases](https://github.com/editinghero/AstralNotes-Android/releases).
-4. **Restore your library:**  
-   Open the new app, go to **Settings > Library Backup & Restore**, tap **Import Backup**, and select your saved `.json` file. Enter your vault password to restore your locked notes.
-
----
-
-### Method 2: Manual Note-by-Note Export
-
-If you prefer to migrate specific notes individually:
-
+   
 1. Open a note in your current version.
 2. Tap the top menu or Share button and select **Export as Markdown (.md)**.
 3. Save the `.md` file to your storage. Repeat for any other important notes.
