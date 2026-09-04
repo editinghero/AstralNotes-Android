@@ -3,7 +3,7 @@ import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, typ
 import type { Note, DrawerDestination, SyncStatus } from './types';
 import { getLocalNotes } from './db';
 import { syncEngine } from './sync';
-import { renderMarkdown, toggleChecklistInMarkdown } from './markdown';
+import { renderMarkdown, toggleChecklistInMarkdown, stripMarkdownForPreview } from './markdown';
 import { getIconSvg, getLogoSvg } from './icons';
 import {
   createShare,
@@ -89,6 +89,22 @@ class AstralNotesApp {
   private activeNote: Note | null = null;
   private editorMode: 'edit' | 'preview' = 'edit';
   private appEl: HTMLElement;
+  private isRedecrypting = false;
+
+  private async triggerRedecrypt(): Promise<void> {
+    if (this.isRedecrypting || !vaultManager.isUnlocked()) return;
+    this.isRedecrypting = true;
+    try {
+      const fresh = await getLocalNotes();
+      this.notes = await syncEngine.redecryptNotes(fresh);
+      this.renderNotesList();
+      this.renderNavCounts();
+    } catch (e) {
+      console.warn('Background redecrypt failed:', e);
+    } finally {
+      this.isRedecrypting = false;
+    }
+  }
 
   constructor() {
     const el = document.getElementById('app');
@@ -188,7 +204,7 @@ class AstralNotesApp {
     syncEngine.onNotesUpdate(async (updatedNotes) => {
       const valid = (updatedNotes || []).filter(n => n && n.id);
       let finalNotes = valid;
-      if (vaultManager.isUnlocked() && valid.some(n => n.isEncrypted && n.title === '[Locked Note]')) {
+      if (vaultManager.isUnlocked() && valid.some(n => (n.isLocked || n.isEncrypted) && (n.title === '[Locked Note]' || n.title === '[Encrypted Note]'))) {
         finalNotes = await syncEngine.redecryptNotes(valid);
       }
       finalNotes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -326,12 +342,6 @@ class AstralNotesApp {
               <button class="btn btn-secondary" id="relock-vault-btn" title="Relock Private Vault">
                 ${getIconSvg('lock', 16)}
                 <span>Relock Vault</span>
-              </button>
-            ` : ''}
-            ${isTrashSection ? `
-              <button class="btn btn-secondary" id="empty-trash-btn" title="Empty Trash" style="color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, var(--border));">
-                ${getIconSvg('trash', 16)}
-                <span>Empty Trash</span>
               </button>
             ` : ''}
             <button class="btn-icon" id="open-settings-btn" title="Settings">
@@ -477,6 +487,9 @@ class AstralNotesApp {
           this.currentDestination = dest;
           this.selectedTag = null;
           closeMobileSidebar();
+          if (vaultManager.isUnlocked() && this.notes.some(n => n.isLocked && (n.title === '[Locked Note]' || n.title === '[Encrypted Note]'))) {
+            this.triggerRedecrypt();
+          }
           this.render();
         }
       });
@@ -488,6 +501,9 @@ class AstralNotesApp {
         if (dest) {
           this.currentDestination = dest;
           this.selectedTag = null;
+          if (vaultManager.isUnlocked() && this.notes.some(n => n.isLocked && (n.title === '[Locked Note]' || n.title === '[Encrypted Note]'))) {
+            this.triggerRedecrypt();
+          }
           this.render();
         }
       });
@@ -940,11 +956,17 @@ class AstralNotesApp {
   }
 
   private renderNoteCardHtml(note: Note): string {
-    const isLockedAndHidden = note.isLocked && !vaultManager.isUnlocked();
+    const isUnlocked = vaultManager.isUnlocked();
+    const isLockedAndHidden = note.isLocked && !isUnlocked;
+
+    if (isUnlocked && note.isLocked && (note.title === '[Locked Note]' || note.title === '[Encrypted Note]')) {
+      this.triggerRedecrypt();
+    }
+
     const displayTitle = isLockedAndHidden ? '[Locked Note]' : (note.title || 'Untitled');
     const displaySnippet = isLockedAndHidden
       ? 'Unlock your private vault to view this encrypted note.'
-      : (renderMarkdown(note.content) || 'Empty note...');
+      : stripMarkdownForPreview(note.content);
     const displayTags = isLockedAndHidden ? [] : (Array.isArray(note.tags) ? note.tags : []);
 
     let formattedDate = 'Recently';

@@ -105,6 +105,7 @@ fun NoteCard(
     onShare: (() -> Unit)? = null,
     isTrashSection: Boolean = false,
     isLockedSection: Boolean = false,
+    isVaultUnlocked: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -116,14 +117,19 @@ fun NoteCard(
     val secondaryTextColor = remember(cardBg) { NoteColorPalette.getNoteSecondaryTextColor(cardBg) }
     var showMenu by remember { mutableStateOf(false) }
 
+    val isLockedAndHidden = note.isLocked && !isVaultUnlocked && !isLockedSection
+    val displayTitle = if (isLockedAndHidden) "[Locked Note]" else note.title
+    val displayContent = if (isLockedAndHidden) "Unlock your private vault to view this encrypted note." else note.content
+
     // Check for image URLs in content or imageUrls list
-    val firstImageUrl = remember(note.imageUrls, note.content) {
-        note.imageUrls.firstOrNull() ?: IMG_REGEX.find(note.content)?.groupValues?.get(1)
+    val firstImageUrl = remember(note.imageUrls, note.content, isLockedAndHidden) {
+        if (isLockedAndHidden) null
+        else note.imageUrls.firstOrNull() ?: IMG_REGEX.find(note.content)?.groupValues?.get(1)
     }
 
     // Extract checklist lines for preview if any
-    val checklistItems = remember(note.content) {
-        if (!note.content.contains("[")) emptyList()
+    val checklistItems = remember(note.content, isLockedAndHidden) {
+        if (isLockedAndHidden || !note.content.contains("[")) emptyList()
         else {
             note.content.lines()
                 .filter { it.trim().matches(TASK_LINE_REGEX) }
@@ -135,7 +141,6 @@ fun NoteCard(
                 }
         }
     }
-
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -183,9 +188,9 @@ fun NoteCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    if (note.title.isNotBlank()) {
+                    if (displayTitle.isNotBlank()) {
                         Text(
-                            text = note.title,
+                            text = displayTitle,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
@@ -215,7 +220,7 @@ fun NoteCard(
                         }
                     }
 
-                    if (isLockedSection) {
+                    if (note.isLocked || isLockedSection) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = "Locked Note",
@@ -250,10 +255,10 @@ fun NoteCard(
                             }
                         }
                     }
-                } else if (note.content.isNotBlank()) {
+                } else if (displayContent.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    val plainPreview = remember(note.content) {
-                        note.content
+                    val plainPreview = remember(displayContent) {
+                        displayContent
                             .replace(STRIP_HEADING, "")
                             .replace(STRIP_BOLD_STAR, "$1")
                             .replace(STRIP_BOLD_UND, "$1")
@@ -286,7 +291,7 @@ fun NoteCard(
                 }
 
                 // Tags flow row
-                if (note.tags.isNotEmpty()) {
+                if (!isLockedAndHidden && note.tags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(10.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),

@@ -67,7 +67,7 @@ fun LockedVaultScreen(
     onNoteClick: (Note) -> Unit,
     onCreateLockedNote: () -> Unit,
     onUnlockToPublic: (Note) -> Unit,
-    onPermanentlyDelete: (Note) -> Unit,
+    onMoveToTrash: (Note) -> Unit,
     onRelockVault: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -248,7 +248,7 @@ fun LockedVaultScreen(
                                 note = note,
                                 onClick = { onNoteClick(note) },
                                 onToggleLock = { onUnlockToPublic(note) },
-                                onMoveToTrash = { onPermanentlyDelete(note) },
+                                onMoveToTrash = { onMoveToTrash(note) },
                                 isLockedSection = true
                             )
                         }

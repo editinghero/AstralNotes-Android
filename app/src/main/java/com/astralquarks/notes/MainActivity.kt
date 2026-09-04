@@ -316,7 +316,7 @@ fun MainAppContent(
                             currentScreen = Screen.EditNote(newNote.id, fromVault = true)
                         },
                         onUnlockToPublic = { viewModel.toggleLock(it) },
-                        onPermanentlyDelete = { viewModel.permanentlyDelete(it) },
+                        onMoveToTrash = { viewModel.moveToTrash(it) },
                         onRelockVault = { viewModel.relockVault() }
                     )
                 }
@@ -348,6 +348,7 @@ fun MainAppContent(
                 is Screen.Trash -> {
                     TrashScreen(
                         trashNotes = trashNotes,
+                        isVaultUnlocked = isVaultUnlocked,
                         onOpenDrawer = { scope.launch { drawerState.open() } },
                         onRestoreNote = { viewModel.restoreFromTrash(it) },
                         onPermanentlyDelete = { viewModel.permanentlyDelete(it) },

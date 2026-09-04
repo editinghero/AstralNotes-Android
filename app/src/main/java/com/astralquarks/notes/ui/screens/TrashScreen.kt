@@ -48,6 +48,7 @@ import com.astralquarks.notes.ui.components.NoteCard
 @Composable
 fun TrashScreen(
     trashNotes: List<Note>,
+    isVaultUnlocked: Boolean = false,
     onOpenDrawer: () -> Unit,
     onRestoreNote: (Note) -> Unit,
     onPermanentlyDelete: (Note) -> Unit,
@@ -71,28 +72,6 @@ fun TrashScreen(
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer, modifier = Modifier.testTag("trash_menu_button")) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
-                    }
-                },
-                actions = {
-                    if (trashNotes.isNotEmpty()) {
-                        FilledTonalButton(
-                            onClick = { showClearDialog = true },
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            ),
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .testTag("empty_trash_button")
-                        ) {
-                            Icon(
-                                Icons.Default.DeleteSweep,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Empty Trash")
-                        }
                     }
                 }
             )
@@ -163,7 +142,8 @@ fun TrashScreen(
                                 onClick = { /* No editing trashed notes */ },
                                 onRestoreFromTrash = { onRestoreNote(note) },
                                 onPermanentlyDelete = { onPermanentlyDelete(note) },
-                                isTrashSection = true
+                                isTrashSection = true,
+                                isVaultUnlocked = isVaultUnlocked
                             )
                         }
                     }

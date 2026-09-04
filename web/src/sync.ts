@@ -109,7 +109,7 @@ class SyncEngine {
               let tags = Array.isArray(data.tags) ? data.tags : [];
               let imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : [];
 
-              const isEncrypted = Boolean(data.isEncrypted);
+              const isEncrypted = Boolean(data.isEncrypted) || Boolean(data.isLocked);
               const encryptedData = typeof data.encryptedData === 'string' ? data.encryptedData : undefined;
               const iv = typeof data.iv === 'string' ? data.iv : undefined;
 
@@ -204,7 +204,7 @@ class SyncEngine {
 
     for (const note of notes) {
       if (!note) continue;
-      if (note.isEncrypted && note.encryptedData && note.iv) {
+      if ((note.isEncrypted || note.isLocked) && note.encryptedData && note.iv) {
         let decrypted = false;
         let title = typeof note.title === 'string' ? note.title : '';
         let content = typeof note.content === 'string' ? note.content : '';
