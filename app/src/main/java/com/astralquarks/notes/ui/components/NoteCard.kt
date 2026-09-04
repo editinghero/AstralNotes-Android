@@ -66,7 +66,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.astralquarks.notes.model.Note
 import com.astralquarks.notes.model.NoteColorPalette
-import com.astralquarks.notes.markdown.MarkdownRenderer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,6 +75,20 @@ private val TASK_LINE_REGEX = Regex("^[\\-*+]\\s+\\[[ xX]\\].*")
 private val TASK_CHECKED_REGEX = Regex("^[\\-*+]\\s+\\[[xX]\\].*")
 private val TASK_PREFIX_REGEX = Regex("^[\\-*+]\\s+\\[[ xX]\\]\\s*")
 private val MD_FORMAT_REGEX = Regex("(#+\\s+|\\[(.*?)\\]\\(.*?\\)|!\\[.*?\\]\\(.*?\\)|[*_~=`\"])")
+private val STRIP_HEADING = Regex("^#{1,6}\\s+", RegexOption.MULTILINE)
+private val STRIP_BOLD_STAR = Regex("\\*\\*(.+?)\\*\\*")
+private val STRIP_BOLD_UND = Regex("__(.+?)__")
+private val STRIP_ITALIC_STAR = Regex("\\*(.+?)\\*")
+private val STRIP_ITALIC_UND = Regex("_(.+?)_")
+private val STRIP_STRIKE = Regex("~~(.+?)~~")
+private val STRIP_HIGHLIGHT = Regex("==(.+?)==")
+private val STRIP_CODE = Regex("`(.+?)`")
+private val STRIP_IMG = Regex("!\\[.*?\\]\\(.*?\\)")
+private val STRIP_LINK = Regex("\\[(.+?)\\]\\(.*?\\)")
+private val STRIP_QUOTE = Regex("^[>]+\\s?", RegexOption.MULTILINE)
+private val STRIP_TASK = Regex("^[-*+]\\s+\\[[ xX]\\]\\s*", RegexOption.MULTILINE)
+private val STRIP_BULLET = Regex("^[-*+]\\s+", RegexOption.MULTILINE)
+private val STRIP_NUMBERED = Regex("^\\d+\\.\\s+", RegexOption.MULTILINE)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -239,11 +252,34 @@ fun NoteCard(
                     }
                 } else if (note.content.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
+                    val plainPreview = remember(note.content) {
+                        note.content
+                            .replace(STRIP_HEADING, "")
+                            .replace(STRIP_BOLD_STAR, "$1")
+                            .replace(STRIP_BOLD_UND, "$1")
+                            .replace(STRIP_ITALIC_STAR, "$1")
+                            .replace(STRIP_ITALIC_UND, "$1")
+                            .replace(STRIP_STRIKE, "$1")
+                            .replace(STRIP_HIGHLIGHT, "$1")
+                            .replace(STRIP_CODE, "$1")
+                            .replace(STRIP_IMG, "")
+                            .replace(STRIP_LINK, "$1")
+                            .replace(STRIP_QUOTE, "")
+                            .replace(STRIP_TASK, "")
+                            .replace(STRIP_BULLET, "")
+                            .replace(STRIP_NUMBERED, "")
+                            .trim()
+                            .take(200)
+                    }
                     Box(modifier = Modifier.heightIn(max = 100.dp).clipToBounds()) {
-                        MarkdownRenderer(
-                            markdown = note.content,
-                            textColor = secondaryTextColor,
-                            isSnippetPreview = true,
+                        Text(
+                            text = plainPreview,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = secondaryTextColor,
+                                lineHeight = 20.sp
+                            ),
+                            maxLines = 5,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

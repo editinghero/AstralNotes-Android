@@ -194,7 +194,9 @@ class NoteRepository(
 
             for (cloud in cloudNotes) {
                 val local = localMap[cloud.id]
-                if (local == null || cloud.updatedAt > local.updatedAt) {
+                val isLocalPlaceholder = local?.title == "[Locked Note]" || local?.title == "[Encrypted Note]"
+                val isCloudDecrypted = cloud.title != "[Locked Note]" && cloud.title != "[Encrypted Note]"
+                if (local == null || cloud.updatedAt > local.updatedAt || (isLocalPlaceholder && isCloudDecrypted)) {
                     toSaveLocally.add(cloud)
                 }
             }
