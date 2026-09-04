@@ -1,6 +1,6 @@
-# AstralNotes - Expressive Notes With AI & Zero-Knowledge Vault
+# Astral Notes
 
-AstralNotes is an offline-first, high-performance note-taking and knowledge management system available as a native Android app and responsive web progressive web application (PWA). It combines Material 3 Expressive aesthetics, client-side zero-knowledge AES-256-GCM encryption, user-owned Google Gemini AI intelligence, and real-time bidirectional cloud synchronization.
+AstralNotes is an offline-first, high-performance note-taking and knowledge management system available as a native Android app or responsive web progressive web application (PWA). It combines Material 3 Expressive aesthetics, client-side zero-knowledge AES-256-GCM Vault encryption, user-owned Google Gemini AI API Key, and real-time bidirectional cloud synchronization. 
 
 ## Screenshot & Live Links
 
@@ -10,7 +10,7 @@ AstralNotes is an offline-first, high-performance note-taking and knowledge mana
 
 ## Features
 
-- **Material 3 Expressive Design:** Fluid adaptive layouts, custom pastel note tints, contrast-optimized themes, and responsive mobile and desktop viewports.
+- **Material 3 Design:** Fluid adaptive layouts, custom pastel note tints, contrast-optimized themes, and responsive mobile and desktop viewports.
 - **Full Markdown Engine:** Live interactive checklists, code blocks with syntax styling and one-tap copy, headers, text formatting, and automatic list continuation.
 - **Client-Side Zero-Knowledge Vault:** Confidential notes are encrypted on-device using AES-256-GCM and PBKDF2. The Master Vault Key remains in local memory and is never uploaded in plaintext.
 - **User-Provided Gemini AI Intelligence:** 100% user-owned API keys. Instant note summarization, checklist generation, executive action items, and knowledge base conversations across selectable models.
@@ -23,6 +23,10 @@ AstralNotes is an offline-first, high-performance note-taking and knowledge mana
 ## Getting Started
 
 ### 1. Install or Access AstralNotes
+
+[Download APK from GitHub Releases](https://github.com/editinghero/AstralNotes-Android/releases/)
+
+or Can Use The Web App Without Installation-
 
 - **Android:** Download the latest signed APK from [GitHub Releases](https://github.com/editinghero/AstralNotes-Android/releases) and install on Android 8.0 (API 24) or newer.
 - **Web:** Navigate to [astralnotesweb.pages.dev](https://astralnotesweb.pages.dev/) in any modern desktop or mobile browser.
