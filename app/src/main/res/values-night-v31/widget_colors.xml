@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backgrounds -->
+    <color name="widget_background">@android:color/system_neutral1_900</color>
+    <color name="widget_button_background">@android:color/system_accent1_700</color>
+    <color name="widget_recent_background">@android:color/system_neutral1_800</color>
+
+    <!-- Text and Icons -->
+    <color name="widget_title_color">@android:color/system_neutral1_100</color>
+    <color name="widget_subtitle_color">@android:color/system_neutral2_300</color>
+    <color name="widget_button_text_color">@android:color/system_accent1_100</color>
+    <color name="widget_stroke_color">@android:color/system_neutral2_700</color>
+</resources>

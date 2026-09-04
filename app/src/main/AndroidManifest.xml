@@ -47,6 +47,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <receiver android:name=".widget.ToolbarWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_notes_toolbar_info" />
+        </receiver>
     </application>
 
 </manifest>
