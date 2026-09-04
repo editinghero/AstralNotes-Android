@@ -181,7 +181,13 @@ class NoteRepository(
 
             for (local in localNotes) {
                 val cloud = cloudMap[local.id]
-                if (cloud == null || local.updatedAt > cloud.updatedAt) {
+                if (cloud == null) {
+                    if (local.isSynced) {
+                        noteDao.deleteNoteById(local.id)
+                    } else {
+                        toUpload.add(local)
+                    }
+                } else if (local.updatedAt > cloud.updatedAt) {
                     toUpload.add(local)
                 }
             }

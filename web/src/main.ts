@@ -11,6 +11,7 @@ import {
   getSharedNoteMeta,
   revokeShare,
   listUserShares,
+  listActiveSharesForNote,
   exportAsMarkdown,
   exportAsHtml,
   exportAsPdf
@@ -157,9 +158,12 @@ class AstralNotesApp {
 
     syncEngine.onNotesUpdate(async (updatedNotes) => {
       const valid = (updatedNotes || []).filter(n => n && n.id);
-      const redecrypted = await syncEngine.redecryptNotes(valid);
-      redecrypted.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-      this.notes = redecrypted;
+      let finalNotes = valid;
+      if (vaultManager.isUnlocked() && valid.some(n => n.isEncrypted && n.title === '[Locked Note]')) {
+        finalNotes = await syncEngine.redecryptNotes(valid);
+      }
+      finalNotes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      this.notes = finalNotes;
       this.renderNotesList();
       this.renderNavCounts();
     });
@@ -484,28 +488,8 @@ class AstralNotesApp {
       vaultManager.lockVault();
     });
 
-    const handleEmptyTrash = async () => {
-      const trashNotes = this.notes.filter(n => n && n.isTrash && !n.isDeleted);
-      if (trashNotes.length === 0) {
-        this.showToast('Trash is already empty');
-        return;
-      }
-      if (!confirm(`Permanently delete all ${trashNotes.length} note(s) in trash? This cannot be undone.`)) {
-        return;
-      }
-      try {
-        await syncEngine.emptyTrash(this.notes);
-        this.notes = this.notes.filter(n => !n.isTrash);
-        this.renderNotesList();
-        this.renderNavCounts();
-        this.showToast('Trash emptied successfully');
-      } catch (err) {
-        this.showToast((err as Error).message || 'Failed to empty trash');
-      }
-    };
-
-    document.getElementById('empty-trash-btn')?.addEventListener('click', handleEmptyTrash);
-    document.getElementById('dock-empty-trash')?.addEventListener('click', handleEmptyTrash);
+    document.getElementById('empty-trash-btn')?.addEventListener('click', () => this.handleEmptyTrash());
+    document.getElementById('dock-empty-trash')?.addEventListener('click', () => this.handleEmptyTrash());
 
     document.getElementById('new-note-btn')?.addEventListener('click', () => {
       this.openEditor();
@@ -659,6 +643,26 @@ class AstralNotesApp {
     }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
+  private async handleEmptyTrash(): Promise<void> {
+    const trashNotes = this.notes.filter(n => n && n.isTrash && !n.isDeleted);
+    if (trashNotes.length === 0) {
+      this.showToast('Trash is already empty');
+      return;
+    }
+    if (!confirm(`Permanently delete all ${trashNotes.length} note(s) in trash? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await syncEngine.emptyTrash(this.notes);
+      this.notes = this.notes.filter(n => !n.isTrash);
+      this.renderNotesList();
+      this.renderNavCounts();
+      this.showToast('Trash emptied successfully');
+    } catch (err) {
+      this.showToast((err as Error).message || 'Failed to empty trash');
+    }
+  }
+
   private renderNotesList(): void {
     const container = document.getElementById('notes-container');
     if (!container) return;
@@ -696,6 +700,21 @@ class AstralNotesApp {
 
     let html = '';
 
+    if (this.currentDestination === 'TRASH') {
+      html += `
+        <div class="trash-action-bar">
+          <div class="trash-action-info">
+            ${getIconSvg('trash', 18)}
+            <span style="font-size: 0.9rem; font-weight: 600;">${filtered.length} note(s) in trash</span>
+          </div>
+          <button class="btn btn-secondary trash-empty-btn" id="content-empty-trash-btn" style="color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 40%, var(--border));">
+            ${getIconSvg('trash', 14)}
+            <span>Empty Trash</span>
+          </button>
+        </div>
+      `;
+    }
+
     if (pinnedNotes.length > 0) {
       html += `
         <div class="section-header">${getIconSvg('pin', 14)} Pinned</div>
@@ -717,6 +736,21 @@ class AstralNotesApp {
     }
 
     container.innerHTML = html;
+
+    document.getElementById('content-empty-trash-btn')?.addEventListener('click', () => {
+      this.handleEmptyTrash();
+    });
+
+    container.querySelectorAll('.pin-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const note = this.notes.find(n => n.id === id);
+        if (note) {
+          await this.togglePin(note);
+        }
+      });
+    });
 
     container.querySelectorAll('.card-restore-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
@@ -884,10 +918,16 @@ class AstralNotesApp {
       : (renderMarkdown(note.content) || 'Empty note...');
     const displayTags = isLockedAndHidden ? [] : (Array.isArray(note.tags) ? note.tags : []);
 
-    const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric'
-    });
+    let formattedDate = 'Recently';
+    if (note.updatedAt && !isNaN(Number(note.updatedAt))) {
+      const d = new Date(Number(note.updatedAt));
+      if (!isNaN(d.getTime())) {
+        formattedDate = d.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric'
+        });
+      }
+    }
 
     const borderStyle = note.colorHex && note.colorHex !== '#DEFAULT'
       ? `style="border-left: 4px solid ${note.colorHex};"`
@@ -898,7 +938,7 @@ class AstralNotesApp {
         <div class="note-card-header">
           <h3 class="note-card-title">${displayTitle}</h3>
           ${!isLockedAndHidden && !note.isTrash ? `
-            <button class="pin-btn ${note.isPinned ? 'active' : ''}" title="${note.isPinned ? 'Unpin' : 'Pin'}">
+            <button class="pin-btn ${note.isPinned ? 'active' : ''}" data-id="${note.id}" title="${note.isPinned ? 'Unpin' : 'Pin'}">
               ${getIconSvg('pin', 16)}
             </button>
           ` : ''}
@@ -1474,16 +1514,26 @@ class AstralNotesApp {
 
   private openShareModal(note: Note): void {
     const mount = document.getElementById('modal-mount')!;
+    const displayName = note.isLocked ? 'Private Note' : (note.title || 'Untitled');
+
     mount.innerHTML = `
       <div class="modal-overlay" id="share-modal">
-        <div class="modal-card" style="max-width: 480px;">
+        <div class="modal-card" style="max-width: 520px;">
           <div class="modal-header">
             <h3 class="modal-title">Share Note</h3>
             <button class="btn-icon" id="modal-close-btn">${getIconSvg('close', 18)}</button>
           </div>
-          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.5;">
-            Generate a read-only link or export "<strong>${note.title || 'Untitled'}</strong>".
+          <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+            Generate a read-only link or export "<strong>${displayName}</strong>".
           </p>
+
+          <div id="active-shares-container" style="display: none; margin-bottom: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; background: var(--bg-surface-elevated);">
+            <div style="font-size: 0.84rem; font-weight: 700; color: var(--text-ink); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+              <span>Active Shared Links</span>
+              <span id="active-shares-count" class="tag-chip"></span>
+            </div>
+            <div id="active-shares-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 160px; overflow-y: auto;"></div>
+          </div>
 
           <div id="share-form">
             <div class="form-group" style="margin-bottom: 14px;">
@@ -1548,6 +1598,77 @@ class AstralNotesApp {
 
     document.getElementById('modal-close-btn')?.addEventListener('click', () => this.closeModal());
 
+    const loadActiveShares = async () => {
+      try {
+        const active = await listActiveSharesForNote(note.id);
+        const container = document.getElementById('active-shares-container');
+        const list = document.getElementById('active-shares-list');
+        const count = document.getElementById('active-shares-count');
+        if (!container || !list) return;
+
+        if (active.length > 0) {
+          container.style.display = 'block';
+          if (count) count.textContent = `${active.length} active`;
+          const base = `${window.location.origin}${window.location.pathname}`;
+          list.innerHTML = active.map(s => {
+            const shareUrl = `${base}#/share/${s.shareId}`;
+            const expiryStr = s.expiresAt ? `Expires ${new Date(s.expiresAt).toLocaleDateString()}` : 'Never expires';
+            const titleToShow = note.isLocked ? 'Private Note' : s.title;
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; gap: 8px;">
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${titleToShow}
+                  </div>
+                  <div style="font-size: 0.72rem; color: var(--text-secondary); display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+                    <span style="color: ${s.isPasswordProtected ? 'var(--primary)' : 'inherit'}; font-weight: 600;">
+                      ${s.isPasswordProtected ? 'Password Protected' : 'Public'}
+                    </span>
+                    <span>${expiryStr}</span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" class="btn btn-secondary active-copy-share-btn" data-url="${shareUrl}" style="padding: 4px 8px; font-size: 0.75rem;" title="Copy Link">
+                    ${getIconSvg('copy', 13)}
+                  </button>
+                  <button type="button" class="btn-icon active-revoke-share-btn" data-id="${s.shareId}" style="color: var(--destructive); padding: 4px;" title="Revoke Link">
+                    ${getIconSvg('trash', 14)}
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          list.querySelectorAll('.active-copy-share-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const url = btn.getAttribute('data-url');
+              if (url) {
+                navigator.clipboard.writeText(url);
+                this.showToast('Share link copied to clipboard!');
+              }
+            });
+          });
+
+          list.querySelectorAll('.active-revoke-share-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const shareId = btn.getAttribute('data-id');
+              if (shareId && confirm('Revoke this share link?')) {
+                await revokeShare(shareId);
+                this.showToast('Share link revoked');
+                await loadActiveShares();
+              }
+            });
+          });
+        } else {
+          container.style.display = 'none';
+        }
+      } catch (e) {
+        console.warn('Could not load active shares for note:', e);
+      }
+    };
+
+    loadActiveShares();
+
     const expirySelect = document.getElementById('share-expiry-select') as HTMLSelectElement;
     const customExpiryWrap = document.getElementById('custom-expiry-wrap');
     expirySelect?.addEventListener('change', () => {
@@ -1604,6 +1725,8 @@ class AstralNotesApp {
           navigator.clipboard.writeText(shareUrl);
           this.showToast('Share link copied to clipboard!');
         });
+
+        await loadActiveShares();
       } catch (err) {
         alert(`Failed to create share: ${(err as Error).message}`);
         generateBtn.disabled = false;
@@ -1634,24 +1757,24 @@ class AstralNotesApp {
           <div id="reader-error" style="color: var(--destructive); font-size: 0.88rem; margin-top: 14px; text-align: center; font-weight: 600;"></div>
         </div>
 
-        <div id="reader-content-card" style="display: none; width: 100%; max-width: 820px; background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-glass); margin-bottom: 40px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 24px; gap: 12px; flex-wrap: wrap;">
+        <div id="reader-content-card" class="share-reader-card" style="display: none;">
+          <div class="share-reader-header">
             <div>
-              <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); background: var(--color-accent-subtle); padding: 3px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border-active);">Read-Only</span>
-              <h1 id="reader-title" style="font-size: 1.7rem; font-weight: 800; font-family: var(--font-display); color: var(--text-ink); margin-top: 6px;"></h1>
+              <span class="share-reader-badge">Read-Only</span>
+              <h1 id="reader-title" class="share-reader-title"></h1>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="share-reader-actions">
               <button class="btn btn-secondary" id="reader-copy-btn" style="font-size: 0.85rem; padding: 7px 14px;">
                 ${getIconSvg('copy', 14)}
                 <span>Copy Text</span>
               </button>
-              <a href="#" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 14px; text-decoration: none;">
+              <a href="https://astralnotesweb.pages.dev/" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="font-size: 0.85rem; padding: 7px 14px; text-decoration: none;">
                 ${getLogoSvg(18)}
                 <span>Astral Notes</span>
               </a>
             </div>
           </div>
-          <div id="reader-body" class="markdown-preview" style="line-height: 1.8;"></div>
+          <div id="reader-body" class="share-reader-body markdown-preview"></div>
         </div>
       </div>
     `;
@@ -1668,26 +1791,33 @@ class AstralNotesApp {
       const meta = await getSharedNoteMeta(shareId);
 
       if (meta.isDeleted) {
+        document.title = 'Shared Note Deleted | Astral Notes';
         subtitle.textContent = 'This shared note has been deleted by its author.';
         return;
       }
 
       if (meta.isExpired) {
+        document.title = 'Shared Note Expired | Astral Notes';
         subtitle.textContent = 'This shared link has expired.';
         return;
       }
+
+      const isPrivate = meta.title === 'Private Note';
+      document.title = isPrivate ? 'Private Note | Astral Notes' : `${meta.title || 'Shared Note'} | Astral Notes`;
 
       if (!meta.isPasswordProtected) {
         const decrypted = await unlockSharedNote(shareId);
         authCard.style.display = 'none';
         contentCard.style.display = 'block';
-        readerTitle.textContent = decrypted.title || 'Untitled Note';
+        const displayTitle = isPrivate ? 'Private Note' : (decrypted.title || 'Untitled Note');
+        readerTitle.textContent = displayTitle;
+        document.title = `${displayTitle} | Astral Notes`;
         readerBody.innerHTML = renderMarkdown(decrypted.content);
         readerBody.querySelectorAll('.task-checkbox').forEach(cb => {
           (cb as HTMLInputElement).disabled = true;
         });
         document.getElementById('reader-copy-btn')?.addEventListener('click', () => {
-          navigator.clipboard.writeText(`${decrypted.title}\n\n${decrypted.content}`);
+          navigator.clipboard.writeText(`${displayTitle}\n\n${decrypted.content}`);
           this.showToast('Note copied to clipboard!');
         });
         return;
@@ -1703,13 +1833,15 @@ class AstralNotesApp {
           const decrypted = await unlockSharedNote(shareId, pass);
           authCard.style.display = 'none';
           contentCard.style.display = 'block';
-          readerTitle.textContent = decrypted.title || 'Untitled Note';
+          const displayTitle = isPrivate ? 'Private Note' : (decrypted.title || 'Untitled Note');
+          readerTitle.textContent = displayTitle;
+          document.title = `${displayTitle} | Astral Notes`;
           readerBody.innerHTML = renderMarkdown(decrypted.content);
           readerBody.querySelectorAll('.task-checkbox').forEach(cb => {
             (cb as HTMLInputElement).disabled = true;
           });
           document.getElementById('reader-copy-btn')?.addEventListener('click', () => {
-            navigator.clipboard.writeText(`${decrypted.title}\n\n${decrypted.content}`);
+            navigator.clipboard.writeText(`${displayTitle}\n\n${decrypted.content}`);
             this.showToast('Note copied to clipboard!');
           });
         } catch (err) {
@@ -1717,6 +1849,7 @@ class AstralNotesApp {
         }
       });
     } catch (err) {
+      document.title = 'Shared Note | Astral Notes';
       subtitle.textContent = (err as Error).message;
     }
   }
@@ -1801,11 +1934,13 @@ class AstralNotesApp {
                 : 'Never expires';
               const base = `${window.location.origin}${window.location.pathname}`;
               const shareUrl = `${base}#/share/${s.shareId}`;
+              const isPrivate = s.title === 'Private Note' || this.notes.some(n => n.id === s.noteId && n.isLocked);
+              const titleToShow = isPrivate ? 'Private Note' : s.title;
               return `
                 <div class="share-item-row" data-share-id="${s.shareId}">
                   <div style="flex: 1; min-width: 0;">
                     <div style="font-weight: 700; color: var(--text-ink); font-size: 0.95rem; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                      ${s.title}
+                      ${titleToShow}
                     </div>
                     <div style="display: flex; gap: 12px; font-size: 0.78rem; color: var(--text-secondary); align-items: center;">
                       <span style="color: ${s.isPasswordProtected ? 'var(--primary)' : 'inherit'}; font-weight: 600;">
@@ -2128,6 +2263,20 @@ class AstralNotesApp {
                   <span>Change Vault Password</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Android App</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--bg-surface-elevated, var(--surface)); padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+              <div>
+                <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-ink);">Download the Android app</div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">Download latest APK releases from GitHub</div>
+              </div>
+              <a href="https://github.com/editinghero/AstralNotes-Android/releases" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                ${getIconSvg('download', 15)}
+                <span>GitHub Releases</span>
+              </a>
             </div>
           </div>
         </div>

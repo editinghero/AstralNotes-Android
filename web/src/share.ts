@@ -45,7 +45,7 @@ export async function createShare(
     shareId,
     ownerUid: user.uid,
     noteId: note.id,
-    title: note.title || 'Untitled Note',
+    title: note.isLocked ? 'Private Note' : (note.title || 'Untitled Note'),
     salt: bufferToBase64(salt),
     iv: encrypted.iv,
     encryptedPayload: encrypted.encryptedData,
@@ -143,8 +143,9 @@ export async function unlockSharedNote(
 
   try {
     const decrypted = await decryptNotePayload(data.encryptedPayload, data.iv, shareKey);
+    const isPrivate = data.title === 'Private Note';
     return {
-      title: decrypted.title,
+      title: isPrivate ? 'Private Note' : decrypted.title,
       content: decrypted.content,
       tags: decrypted.tags,
       imageUrls: decrypted.imageUrls,
@@ -192,6 +193,12 @@ export async function listUserShares(): Promise<ShareRecord[]> {
     console.error('Failed to list user shares:', e);
     return [];
   }
+}
+
+export async function listActiveSharesForNote(noteId: string): Promise<ShareRecord[]> {
+  const shares = await listUserShares();
+  const now = Date.now();
+  return shares.filter(s => s.noteId === noteId && (!s.expiresAt || s.expiresAt > now));
 }
 
 export function exportAsMarkdown(note: Note): void {

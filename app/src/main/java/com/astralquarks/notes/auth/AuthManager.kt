@@ -176,8 +176,7 @@ class AuthManager(private val context: Context, var vaultSecurityManager: VaultS
 
     fun getEffectiveKey(forLockedNote: Boolean = false): SecretKey? {
         if (forLockedNote) {
-            val vKey = vaultSecurityManager?.getVaultKey()
-            if (vKey != null) return vKey
+            return vaultSecurityManager?.getVaultKey()
         }
         return getEncryptionKey()
     }
@@ -318,7 +317,6 @@ class AuthManager(private val context: Context, var vaultSecurityManager: VaultS
             callbackFlow {
                 var registration: ListenerRegistration? = null
                 try {
-                    val key = getEffectiveKey(true)
                     registration = firestore.collection("user")
                         .document(uid)
                         .collection("notes")
@@ -329,6 +327,7 @@ class AuthManager(private val context: Context, var vaultSecurityManager: VaultS
                                 return@addSnapshotListener
                             }
                             if (snapshot != null) {
+                                val key = getEffectiveKey(true)
                                 val notes = snapshot.documents.mapNotNull { doc ->
                                     doc.data?.let { Note.fromFirestoreV2Map(it, key) }
                                 }
