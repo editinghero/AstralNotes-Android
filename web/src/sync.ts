@@ -10,7 +10,7 @@ import {
 import { db, auth } from './firebase';
 import type { Note, SyncStatus, EncryptedNotePayload } from './types';
 import { deriveKey, encryptNotePayload, decryptNotePayload, base64ToBuffer, bufferToBase64, generateSalt } from './crypto';
-import { saveLocalNote, saveLocalNotesBatch, deleteLocalNote, getMetaValue, setMetaValue } from './db';
+import { saveLocalNote, saveLocalNotesBatch, deleteLocalNote, syncLocalNotesWithCloud, deleteLocalNotesBatch, getMetaValue, setMetaValue } from './db';
 import { vaultManager } from './vault';
 import { deleteSharesForNote } from './share';
 
@@ -176,7 +176,7 @@ class SyncEngine {
             }
 
             const activeCloudNotes = cloudNotes.filter(n => n && !n.isDeleted);
-            await saveLocalNotesBatch(activeCloudNotes);
+            await syncLocalNotesWithCloud(activeCloudNotes);
             this.setStatus('SYNCED');
 
             if (onNotesReceived) {
@@ -206,10 +206,10 @@ class SyncEngine {
       if (!note) continue;
       if (note.isEncrypted && note.encryptedData && note.iv) {
         let decrypted = false;
-        let title = note.title;
-        let content = note.content;
-        let tags = note.tags;
-        let imageUrls = note.imageUrls;
+        let title = typeof note.title === 'string' ? note.title : '';
+        let content = typeof note.content === 'string' ? note.content : '';
+        let tags = Array.isArray(note.tags) ? note.tags : [];
+        let imageUrls = Array.isArray(note.imageUrls) ? note.imageUrls : [];
 
         if (vaultKey) {
           try {
@@ -237,17 +237,23 @@ class SyncEngine {
 
         const updatedNote: Note = {
           ...note,
-          title: decrypted ? title : (note.isLocked && !vaultManager.isUnlocked() ? '[Locked Note]' : note.title),
-          content: decrypted ? content : (note.isLocked && !vaultManager.isUnlocked() ? 'Unlock your private vault to view this encrypted note.' : note.content),
-          tags: decrypted ? tags : note.tags,
-          imageUrls: decrypted ? imageUrls : note.imageUrls
+          title: decrypted ? title : (note.isLocked && !vaultManager.isUnlocked() ? '[Locked Note]' : (title || 'Untitled')),
+          content: decrypted ? content : (note.isLocked && !vaultManager.isUnlocked() ? 'Unlock your private vault to view this encrypted note.' : content),
+          tags: decrypted ? tags : (Array.isArray(note.tags) ? note.tags : []),
+          imageUrls: decrypted ? imageUrls : (Array.isArray(note.imageUrls) ? note.imageUrls : [])
         };
         result.push(updatedNote);
         if (decrypted) {
           decryptedBatch.push(updatedNote);
         }
       } else {
-        result.push(note);
+        result.push({
+          ...note,
+          title: typeof note.title === 'string' ? note.title : 'Untitled',
+          content: typeof note.content === 'string' ? note.content : '',
+          tags: Array.isArray(note.tags) ? note.tags : [],
+          imageUrls: Array.isArray(note.imageUrls) ? note.imageUrls : []
+        });
       }
     }
 
@@ -372,6 +378,33 @@ class SyncEngine {
     } catch (e) {
       console.error('Failed to delete note in Firestore V2:', e);
       this.setStatus('ERROR');
+    }
+  }
+
+  public async emptyTrash(notes: Note[]): Promise<void> {
+    const trashNotes = notes.filter(n => n && n.isTrash && !n.isDeleted);
+    if (trashNotes.length === 0) return;
+
+    const trashIds = trashNotes.map(n => n.id);
+    await deleteLocalNotesBatch(trashIds);
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    this.setStatus('SYNCING');
+    try {
+      await Promise.all(
+        trashNotes.map(async (n) => {
+          const docRef = doc(db, 'user', user.uid, 'notes', n.id);
+          await deleteDoc(docRef);
+          await deleteSharesForNote(n.id);
+        })
+      );
+      this.setStatus('SYNCED');
+    } catch (e) {
+      console.error('Failed to empty trash in Firestore V2:', e);
+      this.setStatus('ERROR');
+      throw e;
     }
   }
 }

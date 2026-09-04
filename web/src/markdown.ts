@@ -6,8 +6,8 @@ marked.setOptions({
   breaks: true
 });
 
-export function renderMarkdown(markdown: string): string {
-  if (!markdown.trim()) {
+export function renderMarkdown(markdown?: string | null): string {
+  if (!markdown || typeof markdown !== 'string' || !markdown.trim()) {
     return '<p class="empty-preview">No content to preview.</p>';
   }
 

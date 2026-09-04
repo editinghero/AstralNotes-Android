@@ -68,6 +68,47 @@ export async function saveLocalNotesBatch(notes: Note[]): Promise<void> {
   });
 }
 
+export async function syncLocalNotesWithCloud(cloudNotes: Note[]): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NOTES, 'readwrite');
+    const store = tx.objectStore(STORE_NOTES);
+    const cloudIds = new Set(cloudNotes.map(n => n.id));
+
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) {
+        const note = cursor.value as Note;
+        if (!cloudIds.has(note.id) && note.isSynced) {
+          cursor.delete();
+        }
+        cursor.continue();
+      } else {
+        for (const note of cloudNotes) {
+          store.put(note);
+        }
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteLocalNotesBatch(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NOTES, 'readwrite');
+    const store = tx.objectStore(STORE_NOTES);
+    for (const id of ids) {
+      store.delete(id);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function deleteLocalNote(id: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {

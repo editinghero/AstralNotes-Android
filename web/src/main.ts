@@ -157,7 +157,9 @@ class AstralNotesApp {
 
     syncEngine.onNotesUpdate(async (updatedNotes) => {
       const valid = (updatedNotes || []).filter(n => n && n.id);
-      this.notes = await syncEngine.redecryptNotes(valid);
+      const redecrypted = await syncEngine.redecryptNotes(valid);
+      redecrypted.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      this.notes = redecrypted;
       this.renderNotesList();
       this.renderNavCounts();
     });
@@ -218,6 +220,7 @@ class AstralNotesApp {
 
     const isVaultSection = this.currentDestination === 'VAULT';
     const isVaultUnlocked = vaultManager.isUnlocked();
+    const isTrashSection = this.currentDestination === 'TRASH';
 
     this.appEl.innerHTML = `
       <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -292,21 +295,29 @@ class AstralNotesApp {
                 <span>Relock Vault</span>
               </button>
             ` : ''}
+            ${isTrashSection ? `
+              <button class="btn btn-secondary" id="empty-trash-btn" title="Empty Trash" style="color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, var(--border));">
+                ${getIconSvg('trash', 16)}
+                <span>Empty Trash</span>
+              </button>
+            ` : ''}
             <button class="btn-icon" id="open-settings-btn" title="Settings">
               ${getIconSvg('settings', 18)}
             </button>
             <button class="btn-icon" id="toggle-layout" title="Toggle Grid/List">
               ${getIconSvg(this.isGridView ? 'list-view' : 'grid', 18)}
             </button>
-            <button class="btn btn-secondary" id="import-btn" title="Import Markdown or Text">
-              ${getIconSvg('upload', 16)}
-              <span>Import</span>
-            </button>
-            <input type="file" id="file-importer" style="display: none;" accept=".md,.txt,text/plain,text/markdown" />
-            <button class="btn btn-primary" id="new-note-btn">
-              ${getIconSvg('plus', 16)}
-              <span>New Note</span>
-            </button>
+            ${!isTrashSection ? `
+              <button class="btn btn-secondary" id="import-btn" title="Import Markdown or Text">
+                ${getIconSvg('upload', 16)}
+                <span>Import</span>
+              </button>
+              <input type="file" id="file-importer" style="display: none;" accept=".md,.txt,text/plain,text/markdown" />
+              <button class="btn btn-primary" id="new-note-btn">
+                ${getIconSvg('plus', 16)}
+                <span>New Note</span>
+              </button>
+            ` : ''}
           </div>
         </header>
 
@@ -337,18 +348,25 @@ class AstralNotesApp {
         <section class="notes-container" id="notes-container"></section>
 
         <nav class="mobile-bottom-dock">
-          <button class="dock-btn dock-btn-primary" id="dock-new-note" title="New Note">
-            ${getIconSvg('plus', 16)}
-            <span>New</span>
-          </button>
-          <button class="dock-btn" id="dock-new-task" title="New Checklist">
-            ${getIconSvg('check-square', 16)}
-            <span>Checklist</span>
-          </button>
-          <button class="dock-btn" id="dock-new-image" title="New Image Note">
-            ${getIconSvg('image', 16)}
-            <span>Image</span>
-          </button>
+          ${isTrashSection ? `
+            <button class="dock-btn" id="dock-empty-trash" title="Empty Trash" style="color: var(--destructive);">
+              ${getIconSvg('trash', 16)}
+              <span>Empty Trash</span>
+            </button>
+          ` : `
+            <button class="dock-btn dock-btn-primary" id="dock-new-note" title="New Note">
+              ${getIconSvg('plus', 16)}
+              <span>New</span>
+            </button>
+            <button class="dock-btn" id="dock-new-task" title="New Checklist">
+              ${getIconSvg('check-square', 16)}
+              <span>Checklist</span>
+            </button>
+            <button class="dock-btn" id="dock-new-image" title="New Image Note">
+              ${getIconSvg('image', 16)}
+              <span>Image</span>
+            </button>
+          `}
         </nav>
       </main>
 
@@ -465,6 +483,29 @@ class AstralNotesApp {
     document.getElementById('relock-vault-btn')?.addEventListener('click', () => {
       vaultManager.lockVault();
     });
+
+    const handleEmptyTrash = async () => {
+      const trashNotes = this.notes.filter(n => n && n.isTrash && !n.isDeleted);
+      if (trashNotes.length === 0) {
+        this.showToast('Trash is already empty');
+        return;
+      }
+      if (!confirm(`Permanently delete all ${trashNotes.length} note(s) in trash? This cannot be undone.`)) {
+        return;
+      }
+      try {
+        await syncEngine.emptyTrash(this.notes);
+        this.notes = this.notes.filter(n => !n.isTrash);
+        this.renderNotesList();
+        this.renderNavCounts();
+        this.showToast('Trash emptied successfully');
+      } catch (err) {
+        this.showToast((err as Error).message || 'Failed to empty trash');
+      }
+    };
+
+    document.getElementById('empty-trash-btn')?.addEventListener('click', handleEmptyTrash);
+    document.getElementById('dock-empty-trash')?.addEventListener('click', handleEmptyTrash);
 
     document.getElementById('new-note-btn')?.addEventListener('click', () => {
       this.openEditor();
@@ -601,20 +642,21 @@ class AstralNotesApp {
         }
       }
 
-      if (this.selectedTag && !note.tags.includes(this.selectedTag)) {
+      const tags = Array.isArray(note.tags) ? note.tags : [];
+      if (this.selectedTag && !tags.includes(this.selectedTag)) {
         return false;
       }
 
       if (this.searchQuery.trim()) {
         const q = this.searchQuery.toLowerCase();
-        const matchesTitle = note.title.toLowerCase().includes(q);
-        const matchesContent = note.content.toLowerCase().includes(q);
-        const matchesTag = note.tags.some(t => t.toLowerCase().includes(q));
+        const matchesTitle = (note.title || '').toLowerCase().includes(q);
+        const matchesContent = (note.content || '').toLowerCase().includes(q);
+        const matchesTag = tags.some(t => typeof t === 'string' && t.toLowerCase().includes(q));
         if (!matchesTitle && !matchesContent && !matchesTag) return false;
       }
 
       return true;
-    });
+    }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
   private renderNotesList(): void {
@@ -641,9 +683,9 @@ class AstralNotesApp {
     if (filtered.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">${getIconSvg('file', 54)}</div>
-          <div class="empty-state-title">No notes found</div>
-          <p>Create a note or change your filters to get started.</p>
+          <div class="empty-state-icon">${getIconSvg(this.currentDestination === 'TRASH' ? 'trash' : (this.currentDestination === 'VAULT' ? 'lock' : 'file'), 54)}</div>
+          <div class="empty-state-title">${this.currentDestination === 'TRASH' ? 'Trash is empty' : (this.currentDestination === 'VAULT' ? 'No vault notes' : 'No notes found')}</div>
+          <p>${this.currentDestination === 'TRASH' ? 'Items moved to trash will appear here.' : (this.currentDestination === 'VAULT' ? 'Create or move notes into your private vault.' : 'Create a note or change your filters to get started.')}</p>
         </div>
       `;
       return;
@@ -665,7 +707,7 @@ class AstralNotesApp {
 
     if (otherNotes.length > 0) {
       if (pinnedNotes.length > 0) {
-        html += `<div class="section-header">${this.currentDestination === 'VAULT' ? 'Protected Vault Notes' : 'Others'}</div>`;
+        html += `<div class="section-header">${this.currentDestination === 'VAULT' ? 'Protected Vault Notes' : (this.currentDestination === 'TRASH' ? 'Trashed Notes' : 'Others')}</div>`;
       }
       html += `
         <div class="notes-grid ${this.isGridView ? '' : 'list-layout'}">
@@ -676,15 +718,44 @@ class AstralNotesApp {
 
     container.innerHTML = html;
 
+    container.querySelectorAll('.card-restore-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const note = this.notes.find(n => n.id === id);
+        if (note) {
+          note.isTrash = false;
+          note.updatedAt = Date.now();
+          await syncEngine.uploadNote(note);
+          this.renderNotesList();
+          this.renderNavCounts();
+          this.showToast('Note restored from trash');
+        }
+      });
+    });
+
+    container.querySelectorAll('.card-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const note = this.notes.find(n => n.id === id);
+        if (note && confirm('Permanently delete this note?')) {
+          await syncEngine.deleteNote(note.id);
+          this.notes = this.notes.filter(n => n.id !== note.id);
+          this.renderNotesList();
+          this.renderNavCounts();
+          this.showToast('Note permanently deleted');
+        }
+      });
+    });
+
     container.querySelectorAll('.note-card').forEach((card) => {
       const id = card.getAttribute('data-id');
       const note = this.notes.find(n => n.id === id);
       if (!note) return;
 
       card.addEventListener('click', (e) => {
-        if ((e.target as HTMLElement).closest('.pin-btn')) {
-          e.stopPropagation();
-          this.togglePin(note);
+        if ((e.target as HTMLElement).closest('.pin-btn') || (e.target as HTMLElement).closest('.card-restore-btn') || (e.target as HTMLElement).closest('.card-delete-btn')) {
           return;
         }
         if (note.isTrash) {
@@ -811,7 +882,7 @@ class AstralNotesApp {
     const displaySnippet = isLockedAndHidden
       ? 'Unlock your private vault to view this encrypted note.'
       : (renderMarkdown(note.content) || 'Empty note...');
-    const displayTags = isLockedAndHidden ? [] : note.tags;
+    const displayTags = isLockedAndHidden ? [] : (Array.isArray(note.tags) ? note.tags : []);
 
     const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
       month: 'short',
@@ -826,7 +897,7 @@ class AstralNotesApp {
       <article class="note-card" data-id="${note.id}" ${borderStyle}>
         <div class="note-card-header">
           <h3 class="note-card-title">${displayTitle}</h3>
-          ${!isLockedAndHidden ? `
+          ${!isLockedAndHidden && !note.isTrash ? `
             <button class="pin-btn ${note.isPinned ? 'active' : ''}" title="${note.isPinned ? 'Unpin' : 'Pin'}">
               ${getIconSvg('pin', 16)}
             </button>
@@ -842,6 +913,16 @@ class AstralNotesApp {
           <span>${formattedDate}</span>
           ${note.isLocked ? getIconSvg('lock', 14) : ''}
         </div>
+        ${note.isTrash ? `
+          <div style="display: flex; gap: 8px; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px;">
+            <button type="button" class="btn btn-secondary card-restore-btn" data-id="${note.id}" style="padding: 4px 10px; font-size: 0.75rem; flex: 1; border-radius: var(--radius-pill);">
+              ${getIconSvg('archive-restore', 13)} <span>Restore</span>
+            </button>
+            <button type="button" class="btn btn-secondary card-delete-btn" data-id="${note.id}" style="padding: 4px 10px; font-size: 0.75rem; color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 40%, var(--border)); flex: 1; border-radius: var(--radius-pill);">
+              ${getIconSvg('trash', 13)} <span>Delete</span>
+            </button>
+          </div>
+        ` : ''}
       </article>
     `;
   }
@@ -1256,7 +1337,18 @@ class AstralNotesApp {
   private openContextMenu(e: MouseEvent, note: Note): void {
     const mount = document.getElementById('context-mount')!;
 
-    mount.innerHTML = `
+    mount.innerHTML = note.isTrash ? `
+      <div class="context-menu" style="left: ${e.clientX}px; top: ${e.clientY}px;">
+        <div class="context-item" data-action="restore">
+          ${getIconSvg('archive-restore', 16)}
+          <span>Restore Note</span>
+        </div>
+        <div class="context-item danger" data-action="trash">
+          ${getIconSvg('trash', 16)}
+          <span>Delete Forever</span>
+        </div>
+      </div>
+    ` : `
       <div class="context-menu" style="left: ${e.clientX}px; top: ${e.clientY}px;">
         <div class="context-item" data-action="pin">
           ${getIconSvg(note.isPinned ? 'pin-off' : 'pin', 16)}
@@ -1276,7 +1368,7 @@ class AstralNotesApp {
         </div>
         <div class="context-item danger" data-action="trash">
           ${getIconSvg('trash', 16)}
-          <span>${note.isTrash ? 'Delete Forever' : 'Move to Trash'}</span>
+          <span>Move to Trash</span>
         </div>
       </div>
     `;
@@ -1295,6 +1387,14 @@ class AstralNotesApp {
     switch (action) {
       case 'pin':
         await this.togglePin(note);
+        break;
+      case 'restore':
+        note.isTrash = false;
+        note.updatedAt = Date.now();
+        await syncEngine.uploadNote(note);
+        this.renderNotesList();
+        this.renderNavCounts();
+        this.showToast('Note restored from trash');
         break;
       case 'vault':
         if (note.isLocked) {
@@ -1321,14 +1421,18 @@ class AstralNotesApp {
         }
         note.updatedAt = Date.now();
         await syncEngine.uploadNote(note);
-        this.render();
+        this.renderNotesList();
+        this.renderNavCounts();
+        this.showToast(note.isLocked ? 'Note moved to private vault' : 'Note unlocked from vault');
         break;
       case 'archive':
         note.isArchived = !note.isArchived;
         note.isPinned = false;
         note.updatedAt = Date.now();
         await syncEngine.uploadNote(note);
-        this.render();
+        this.renderNotesList();
+        this.renderNavCounts();
+        this.showToast(note.isArchived ? 'Note archived' : 'Note unarchived');
         break;
       case 'share':
         this.openShareModal(note);
@@ -1338,14 +1442,18 @@ class AstralNotesApp {
           if (confirm('Permanently delete this note?')) {
             await syncEngine.deleteNote(note.id);
             this.notes = this.notes.filter(n => n.id !== note.id);
-            this.render();
+            this.renderNotesList();
+            this.renderNavCounts();
+            this.showToast('Note permanently deleted');
           }
         } else {
           note.isTrash = true;
           note.isPinned = false;
           note.updatedAt = Date.now();
           await syncEngine.uploadNote(note);
-          this.render();
+          this.renderNotesList();
+          this.renderNavCounts();
+          this.showToast('Note moved to trash');
         }
         break;
     }
@@ -1360,7 +1468,8 @@ class AstralNotesApp {
     note.isPinned = !note.isPinned;
     note.updatedAt = Date.now();
     await syncEngine.uploadNote(note);
-    this.render();
+    this.renderNotesList();
+    this.renderNavCounts();
   }
 
   private openShareModal(note: Note): void {

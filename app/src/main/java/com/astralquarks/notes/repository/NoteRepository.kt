@@ -129,11 +129,17 @@ class NoteRepository(
     }
 
     suspend fun syncCloudNotes(cloudNotes: List<Note>) {
-        if (cloudNotes.isEmpty()) return
         withContext(Dispatchers.IO) {
             val localNotesMap = noteDao.getAllNotes().associateBy { it.id }
             val toInsertOrUpdate = mutableListOf<Note>()
             val toUpload = mutableListOf<Note>()
+            val cloudIds = cloudNotes.map { it.id }.toSet()
+
+            for ((id, localNote) in localNotesMap) {
+                if (localNote.isSynced && !cloudIds.contains(id)) {
+                    noteDao.deleteNoteById(id)
+                }
+            }
 
             for (cloudNote in cloudNotes) {
                 val localNote = localNotesMap[cloudNote.id]
