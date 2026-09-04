@@ -1,87 +1,105 @@
-# AstralNotes - Database & Cloud Sync Setup Guide
+# AstralNotes - Cloud Sync, Database & Vault Setup Guide
 
-This document provides complete instructions for setting up, configuring, and verifying both the **Local Room Database** and **Cloud Firestore Sync** for **AstralNotes** (`com.astralquarks.notes`).
+This guide provides instructions for setting up the local databases, Cloud Firestore synchronization, zero-knowledge vault metadata, and Google Gemini AI for **AstralNotes** on both Android (`com.astralquarks.notes`) and Web (`astralnotesweb`).
 
 ---
 
-## 1. Architecture Overview
+## 1. System Architecture
 
-AstralNotes is built on an **Offline-First Reactive MVVM Architecture**:
+AstralNotes utilizes an **Offline-First Reactive Architecture** across platforms:
 
-```
-+-------------------------------------------------------------------------+
-|                              Jetpack Compose UI                         |
-|     (HomeScreen, NoteEditScreen, VaultScreen, ArchiveScreen, etc.)      |
-+-------------------------------------------------------------------------+
-                                    ▲
-                                    │ StateFlow / Actions
-                                    ▼
-+-------------------------------------------------------------------------+
-|                               NotesViewModel                            |
-+-------------------------------------------------------------------------+
-                                    ▲
-                                    │ Flow<List<Note>> / Coroutine Calls
-                                    ▼
-+-------------------------------------------------------------------------+
-|                               NoteRepository                            |
-+---------------------+-----------------------------------+---------------+
-                      │                                   │
-                      ▼ (Primary Single Source of Truth)  ▼ (Background Cloud Sync)
-+-------------------------------+               +-------------------------+
-|       Local Room Database     |               |     Firebase Firestore  |
-|       (SQLite / KSP / DAO)    |               |  (users/{uid}/notes/..) |
-+-------------------------------+               +-------------------------+
+```text
++------------------------------------+        +------------------------------------+
+|        Android Jetpack Compose     |        |          Web TypeScript PWA        |
+|  (Compose UI, ViewModels, Coroutines) |     |     (Vite, IndexedDB, Web Crypto)  |
++-----------------+------------------+        +-----------------+------------------+
+                  │                                             │
+                  ▼                                             ▼
++------------------------------------+        +------------------------------------+
+|        Local Room Database         |        |         Local IndexedDB            |
+|       (SQLite / DAO / KSP)         |        |     ("astral_notes_db" store)      |
++-----------------+------------------+        +-----------------+------------------+
+                  │                                             │
+                  │ (AES-256-GCM Encrypted Notes & Vault Meta) │
+                  ▼                                             ▼
++----------------------------------------------------------------------------------+
+|                              Google Cloud Firestore                              |
+|       - user/{uid}/notes/{noteId}         (Encrypted/Plaintext user notes)      |
+|       - user/{uid}/vault_meta/config      (Salt, Wrapped VMK, Verifier Token)    |
+|       - shares/{shareId}                  (Ephemeral encrypted shared links)     |
++----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Local Database Setup (Room SQLite)
+## 2. Firebase Cloud Configuration
 
-The local database operates 100% offline without requiring any external accounts or internet connection.
+Both Android and Web share the same Firebase backend project for seamless cross-platform note synchronization.
 
-### Components
-- **Entity**: `com.astralquarks.notes.model.Note` (`@Entity(tableName = "notes")`)
-- **DAO**: `com.astralquarks.notes.db.NoteDao` (Reactive `Flow<List<Note>>` queries, full-text search, trash management, pin and archive filters)
-- **Converters**: `com.astralquarks.notes.db.Converters` (JSON serialization for tags and image URLs)
-- **Database Instance**: `com.astralquarks.notes.db.AppDatabase` (`"expressive_notes_db"`)
+### Step 1: Create Firebase Project
+1. Navigate to the [Firebase Console](https://console.firebase.google.com/).
+2. Create a new project or select an existing project.
 
-### Verification & Testing
-Room database operations execute on background dispatchers (`Dispatchers.IO`) with reactive `StateFlow` bindings.
+### Step 2: Configure Android Application
+1. In Project Settings, click **Add app** and select **Android**.
+2. **Package Name:** `com.astralquarks.notes`
+3. Generate and paste your development or release SHA-1 certificate fingerprint:
+   ```bash
+   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey
+   ```
+4. Download `google-services.json` and place it in the `app/` directory of the project.
 
----
+> **Security Notice:** Do not commit `google-services.json` or personal API keys into public version control. It is already included in `.gitignore`.
 
-## 3. Cloud Database Setup (Firebase Firestore & Google Sign-In)
+### Step 3: Configure Web Application
+1. In Project Settings, click **Add app** and select **Web**.
+2. Register the web app and obtain the configuration object.
+3. Configure `web/src/firebase.ts` with your project configuration:
+   ```typescript
+   export const firebaseConfig = {
+     apiKey: "YOUR_API_KEY",
+     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+     projectId: "YOUR_PROJECT_ID",
+     storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
+     messagingSenderId: "YOUR_SENDER_ID",
+     appId: "YOUR_APP_ID"
+   };
+   ```
 
-When users sign in via Google Sign-In (using Android Jetpack `CredentialManager`), their notes automatically synchronize bidirectionally with Google Cloud Firestore.
+### Step 4: Enable Authentication Providers
+1. In the Firebase Console, go to **Build > Authentication > Sign-in method**.
+2. Enable **Google** as a sign-in provider.
+3. Add your support email and configure OAuth credentials matching your Google Cloud Console setup.
 
-### Step 1: Firebase Project Configuration
-1. Go to the [Firebase Console](https://console.firebase.google.com/).
-2. Create or select your Firebase project.
-3. Add an **Android Application**:
-   - **Package Name**: `com.astralquarks.notes`
-   - Download the `google-services.json` file and place it in the `app/` directory.
-
-### Step 2: Enable Firebase Authentication
-1. In the Firebase Console, navigate to **Build > Authentication > Sign-in method**.
-2. Enable **Google** as a Sign-in provider.
-3. Configure the **Web Client ID** matching your Google Cloud Console OAuth 2.0 Client Credentials.
-
-### Step 3: Enable Cloud Firestore
-1. Navigate to **Build > Firestore Database**.
-2. Click **Create Database** and select your preferred region.
-3. Choose **Production Rules** or configure the security rules below.
-
-### Step 4: Recommended Firestore Security Rules
-Copy and paste the following rules into **Firestore Database > Rules**:
+### Step 5: Enable Cloud Firestore & Deploy Security Rules
+1. Navigate to **Build > Firestore Database** and click **Create Database**.
+2. Go to the **Rules** tab, replace the contents with the following rules, and click **Publish**:
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User-isolated notes collection
-    match /users/{userId}/notes/{noteId} {
-      // Allow read/write only if authenticated and accessing own user folder
+    
+    // User notes collection (read and write allowed only for the owning user)
+    match /user/{userId}/notes/{noteId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Zero-knowledge vault metadata (salt, wrapped master key, verifier token)
+    match /user/{userId}/vault_meta/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Read-only ephemeral shared notes
+    match /shares/{shareId} {
+      // Anyone can read a shared note if it is unexpired
+      allow read: if resource == null || 
+        resource.data.expiresAt == null || 
+        resource.data.expiresAt > request.time.toMillis();
+        
+      // Only the authenticated author can create, update, or revoke their share
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
   }
 }
@@ -89,26 +107,37 @@ service cloud.firestore {
 
 ---
 
-## 4. Google Gemini AI Setup (User-Provided API Key)
+## 3. Zero-Knowledge Private Vault Architecture
 
-The integrated **Gemini AI Assistant** provides automatic summarization, markdown restructuring, brainstorming, action item checklist extraction, and interactive note chat.
+AstralNotes features client-side zero-knowledge encryption for sensitive notes:
 
-### Setting Up Your Gemini API Key:
-AstralNotes requires **zero server-side or hardcoded API keys**. Each user provides their own key directly inside the app:
+1. **Key Derivation (PBKDF2):** When you configure a vault password, a 256-bit Key Encryption Key (KEK) is derived using 100,000 PBKDF2 iterations and a cryptographic salt.
+2. **Master Vault Key (VMK):** A random 256-bit AES-GCM Vault Master Key is generated. It encrypts and decrypts all vault notes.
+3. **Key Wrapping:** The VMK is encrypted by the KEK and stored in Firestore under `user/{uid}/vault_meta/config`.
+4. **Decryption in Memory:** When unlocking your vault, your password unwraps the VMK into volatile application memory. The plaintext password and VMK are never stored on disk or sent over the network.
+5. **Sync Parity:** Locked notes synced to Firestore are encrypted before transmission (`isEncrypted: true`, `encryptedData`, `iv`).
+
+---
+
+## 4. Google Gemini AI Setup (User-Provided Keys)
+
+AstralNotes operates with **zero server-side or bundled API keys**. Each user connects their own personal key:
+
 1. Obtain a free API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Open AstralNotes on your device.
-3. Open **Settings > Google Gemini Intelligence** (or tap the ✨ Sparkle icon on any note > **Model & Keys**).
-4. Paste your key into **Custom Gemini API Key** and tap **Save Gemini Config**.
-5. You can also switch between models (`gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`) or enable High Thinking Mode anytime.
+2. Open AstralNotes on Android or Web.
+3. Navigate to **Settings > Google Gemini Intelligence** (or tap the Sparkle icon on any note).
+4. Paste your key into **Custom Gemini API Key** and select your preferred model (`gemini-3.7-flash`, `gemini-3.5-flash`, etc.).
+5. Tap **Save Gemini Config**.
 
 ---
 
-## 5. Bidirectional Synchronization Flow
+## 5. Library Backup & Restore Flow
 
-1. **Local Writes**: When a note is created, updated, pinned, archived, or colored, it is instantly persisted to the local SQLite database via Room.
-2. **Cloud Push**: If the user is signed in, `NoteRepository` triggers an asynchronous background job to upload the note to `users/{userId}/notes/{noteId}` in Firestore with merge semantics.
-3. **Cloud Pull / Real-time Listener**: When signed in, `AuthManager.observeFirestoreNotes()` listens for remote snapshot changes and synchronizes any updates into the local Room database automatically.
-4. **Instant Reconnect Sync**: Upon signing in, a full bidirectional reconciliation is performed between local Room DB and Cloud Firestore.
-5. **App Widgets**: Upon every local or cloud mutation, `QuickNoteWidgetProvider.updateAllWidgets()` refreshes the Android home screen widgets.
-
----
+1. **Exporting:**
+   - Navigating to **Backup & Restore** generates a standardized JSON snapshot of all notes.
+   - If locked notes are present, entering the vault password decrypts the notes and re-encrypts them with a salted backup key.
+2. **Importing:**
+   - Selecting an exported JSON file reconstructs notes with intact tags, colors, and timestamps.
+   - If importing vault notes, entering the exported file's vault password unlocks them and re-encrypts them into your local vault session.
+3. **Cross-Platform Compatibility:**
+   - A backup generated on an Android phone can be restored directly into the web application, and vice versa.

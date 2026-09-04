@@ -737,8 +737,15 @@ fun SettingsScreen(
                             Toast.makeText(context, "Password cannot be empty", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        showExportVaultPasswordDialog = false
-                        createDocumentLauncher.launch("astral_backup_${System.currentTimeMillis()}.json")
+                        scope.launch {
+                            val unlockRes = vaultSecurityManager.unlockWithPassword(exportVaultPassword)
+                            if (unlockRes.isSuccess) {
+                                showExportVaultPasswordDialog = false
+                                createDocumentLauncher.launch("astral_backup_${System.currentTimeMillis()}.json")
+                            } else {
+                                Toast.makeText(context, "Incorrect vault password", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 ) {
                     Text("Proceed to Save")

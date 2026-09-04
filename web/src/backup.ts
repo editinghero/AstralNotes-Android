@@ -71,7 +71,14 @@ export async function exportLibrary(exportVaultPassword?: string): Promise<numbe
           tags = dec.tags;
           imageUrls = dec.imageUrls;
         } catch {
-          throw new Error(`Failed to decrypt vault note '${vNote.title}'.`);
+          if (vNote.title && !vNote.title.includes('[Locked Note]')) {
+            title = vNote.title;
+            content = vNote.content;
+            tags = vNote.tags;
+            imageUrls = vNote.imageUrls;
+          } else {
+            throw new Error(`Failed to decrypt vault note '${vNote.title}'.`);
+          }
         }
       }
 
@@ -170,6 +177,10 @@ export async function importLibrary(
   if (vaultArray.length > 0) {
     if (!importedVaultPassword || !importedVaultPassword.trim()) {
       throw new Error('Please enter the vault password of the imported file to unlock its notes.');
+    }
+
+    if (!vaultManager.isUnlocked()) {
+      throw new Error('Please unlock your private vault before importing locked vault notes.');
     }
 
     const currentVaultKey = vaultManager.getVaultKey();

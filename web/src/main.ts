@@ -2051,7 +2051,13 @@ class AstralNotesApp {
               return;
             }
             try {
-              const count = await exportLibrary(password);
+              if (!vaultManager.isUnlocked()) {
+                const ok = await vaultManager.unlockVault(password.trim());
+                if (!ok) {
+                  throw new Error('Incorrect vault password.');
+                }
+              }
+              const count = await exportLibrary(password.trim());
               this.showToast(`Successfully exported ${count} notes to backup file!`);
             } catch (err: unknown) {
               this.showToast(`Export failed: ${(err as Error).message}`);
@@ -2085,6 +2091,12 @@ class AstralNotesApp {
         const inspection = inspectBackup(text);
 
         if (inspection.vaultCount > 0) {
+          if (!vaultManager.isUnlocked()) {
+            this.showToast('Please unlock your private vault before importing locked notes.');
+            this.navigateTo('VAULT');
+            return;
+          }
+
           this.showPromptModal({
             title: 'Imported File Vault Password',
             message: `This backup contains ${inspection.vaultCount} locked vault notes. Enter the vault password of the imported backup file to unlock and restore them:`,
