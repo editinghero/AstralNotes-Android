@@ -4,10 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
 import android.util.Log
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
+import android.content.Context
+import android.content.SharedPreferences
+import android.util.Base64
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -25,9 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 enum class VaultAuthMode {
-    PASSWORD_ONLY,
-    BIOMETRIC_ONLY,
-    PASSWORD_AND_BIOMETRIC
+    PASSWORD_ONLY
 }
 
 data class VaultMetaConfig(
@@ -239,64 +237,6 @@ class VaultSecurityManager(private val context: Context) {
         val verifier = prefs.getString(KEY_VERIFIER, null) ?: return null
         val verifierIv = prefs.getString(KEY_VERIFIER_IV, null) ?: return null
         return VaultMetaConfig(salt, wrappedVmk, wrappedVmkIv, verifier, verifierIv, System.currentTimeMillis())
-    }
-
-    fun getAuthMode(): VaultAuthMode {
-        val modeStr = prefs.getString(KEY_AUTH_MODE, VaultAuthMode.PASSWORD_ONLY.name)
-        return try {
-            VaultAuthMode.valueOf(modeStr ?: VaultAuthMode.PASSWORD_ONLY.name)
-        } catch (e: Exception) {
-            VaultAuthMode.PASSWORD_ONLY
-        }
-    }
-
-    fun setAuthMode(mode: VaultAuthMode) {
-        prefs.edit().putString(KEY_AUTH_MODE, mode.name).apply()
-    }
-
-    fun isBiometricAvailable(): Boolean {
-        val biometricManager = BiometricManager.from(context)
-        return biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS
-    }
-
-    fun showBiometricPrompt(
-        activity: FragmentActivity,
-        title: String = "Unlock Private Vault",
-        subtitle: String = "Verify your biometric credential",
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val executor = ContextCompat.getMainExecutor(context)
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setNegativeButtonText("Cancel")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
-            .build()
-
-        val biometricPrompt = BiometricPrompt(
-            activity,
-            executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    _isVaultUnlocked.value = true
-                    onSuccess()
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    onError(errString.toString())
-                }
-
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    onError("Biometric authentication failed. Try again.")
-                }
-            }
-        )
-
-        biometricPrompt.authenticate(promptInfo)
     }
 
     companion object {

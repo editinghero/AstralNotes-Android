@@ -47,17 +47,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.astralquarks.notes.security.VaultAuthMode
 import kotlinx.coroutines.launch
 
 @Composable
 fun VaultAuthDialog(
     isPasswordSet: Boolean,
-    authMode: VaultAuthMode,
-    isBiometricAvailable: Boolean,
     onVerifyPassword: suspend (String) -> Result<Boolean>,
     onSetPassword: suspend (String) -> Result<Unit>,
-    onTriggerBiometric: (onSuccess: () -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onSuccess: () -> Unit
 ) {
@@ -143,58 +139,56 @@ fun VaultAuthDialog(
                     style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                 )
 
-                if (authMode != VaultAuthMode.BIOMETRIC_ONLY || !isPasswordSet) {
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text(if (!isPasswordSet) "New Password / PIN" else "Vault Password") },
+                    singleLine = true,
+                    enabled = !isProcessing,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = if (!isPasswordSet) ImeAction.Next else ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { handleConfirm() }
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = "Toggle visibility"
+                            )
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("vault_password_input")
+                )
+
+                if (!isPasswordSet) {
                     OutlinedTextField(
-                        value = password,
+                        value = confirmPassword,
                         onValueChange = {
-                            password = it
+                            confirmPassword = it
                             errorMessage = null
                         },
-                        label = { Text(if (!isPasswordSet) "New Password / PIN" else "Vault Password") },
+                        label = { Text("Confirm Password") },
                         singleLine = true,
                         enabled = !isProcessing,
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
-                            imeAction = if (!isPasswordSet) ImeAction.Next else ImeAction.Done
+                            imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = { handleConfirm() }
                         ),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle visibility"
-                                )
-                            }
-                        },
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("vault_password_input")
+                        modifier = Modifier.fillMaxWidth().testTag("vault_confirm_password_input")
                     )
-
-                    if (!isPasswordSet) {
-                        OutlinedTextField(
-                            value = confirmPassword,
-                            onValueChange = {
-                                confirmPassword = it
-                                errorMessage = null
-                            },
-                            label = { Text("Confirm Password") },
-                            singleLine = true,
-                            enabled = !isProcessing,
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Password,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = { handleConfirm() }
-                            ),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("vault_confirm_password_input")
-                        )
-                    }
                 }
 
                 if (errorMessage != null) {

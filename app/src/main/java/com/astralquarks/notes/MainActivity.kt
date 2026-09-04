@@ -317,18 +317,7 @@ fun MainAppContent(
                         },
                         onUnlockToPublic = { viewModel.toggleLock(it) },
                         onPermanentlyDelete = { viewModel.permanentlyDelete(it) },
-                        onRelockVault = { viewModel.relockVault() },
-                        onTriggerBiometric = { onSuccessCallback ->
-                            viewModel.triggerBiometricPrompt(
-                                activity = activity,
-                                onSuccess = {
-                                    onSuccessCallback()
-                                },
-                                onError = { msg ->
-                                    Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
+                        onRelockVault = { viewModel.relockVault() }
                     )
                 }
 
@@ -373,17 +362,6 @@ fun MainAppContent(
                         authManager = viewModel.authManager,
                         onOpenDrawer = { scope.launch { drawerState.open() } },
                         onManualSync = { viewModel.manualSyncAll() },
-                        onTriggerBiometric = { onSuccessCallback ->
-                            viewModel.triggerBiometricPrompt(
-                                activity = activity,
-                                onSuccess = {
-                                    onSuccessCallback()
-                                },
-                                onError = { msg ->
-                                    Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        },
                         onGetAllNotesForBackup = { viewModel.getAllNotesForBackup() },
                         onImportNotesBatch = { notes, onComplete -> viewModel.importNotesBatch(notes, onComplete) }
                     )

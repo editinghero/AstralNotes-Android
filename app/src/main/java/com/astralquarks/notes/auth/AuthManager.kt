@@ -82,8 +82,12 @@ class AuthManager(private val context: Context) {
      * Derives or retrieves the 256-bit AES master encryption key for this user.
      * Compatible with Web Crypto API standards using PBKDF2WithHmacSHA256.
      */
+    private var cachedKey: Pair<String, SecretKey>? = null
+
     fun getEncryptionKey(): SecretKey? {
         val uid = userId ?: return null
+        if (cachedKey?.first == uid) return cachedKey?.second
+
         val storedPass = vaultPrefs.getString("vault_key_$uid", null) ?: uid
         val saltStr = vaultPrefs.getString("vault_salt_$uid", null)
         val salt = if (!saltStr.isNullOrBlank()) {
@@ -93,7 +97,9 @@ class AuthManager(private val context: Context) {
             vaultPrefs.edit().putString("vault_salt_$uid", Base64.encodeToString(newSalt, Base64.NO_WRAP)).apply()
             newSalt
         }
-        return CryptoEngine.deriveKey(storedPass, salt)
+        val newKey = CryptoEngine.deriveKey(storedPass, salt)
+        cachedKey = Pair(uid, newKey)
+        return newKey
     }
 
     private fun getEffectiveWebClientId(): String {
@@ -159,6 +165,7 @@ class AuthManager(private val context: Context) {
             auth.signOut()
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
             _currentUser.value = null
+            cachedKey = null
             _syncMessage.value = "Signed out"
             _syncStatus.value = SyncStatus.SYNCED
         } catch (e: Exception) {

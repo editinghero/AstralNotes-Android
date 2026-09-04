@@ -3,7 +3,6 @@ package com.astralquarks.notes.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.astralquarks.notes.ai.GeminiManager
@@ -202,18 +201,6 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
             _selectedTagsFilter.value = currentFilter
             QuickNoteWidgetProvider.updateAllWidgets(application)
         }
-    }
-
-    fun triggerBiometricPrompt(
-        activity: FragmentActivity,
-        onSuccess: () -> Unit = {},
-        onError: (String) -> Unit = {}
-    ) {
-        vaultSecurityManager.showBiometricPrompt(
-            activity = activity,
-            onSuccess = onSuccess,
-            onError = onError
-        )
     }
 
     fun relockVault() {

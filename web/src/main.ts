@@ -289,6 +289,12 @@ class AstralNotesApp {
     });
   }
 
+  private navigateTo(dest: DrawerDestination): void {
+    this.currentDestination = dest;
+    this.selectedTag = null;
+    this.render();
+  }
+
   private bindEvents(): void {
     this.appEl.querySelectorAll('.nav-item').forEach((item) => {
       item.addEventListener('click', () => {
@@ -544,6 +550,14 @@ class AstralNotesApp {
           this.togglePin(note);
           return;
         }
+        if (note.isTrash) {
+          return;
+        }
+        if (note.isLocked && !vaultManager.isUnlocked()) {
+          this.showToast('Please unlock your private vault to view or edit this note');
+          this.navigateTo('VAULT');
+          return;
+        }
         this.openEditor(note);
       });
 
@@ -651,6 +665,13 @@ class AstralNotesApp {
   }
 
   private renderNoteCardHtml(note: Note): string {
+    const isLockedAndHidden = note.isLocked && !vaultManager.isUnlocked();
+    const displayTitle = isLockedAndHidden ? '[Locked Note]' : (note.title || 'Untitled');
+    const displaySnippet = isLockedAndHidden
+      ? 'Unlock your private vault to view this encrypted note.'
+      : (renderMarkdown(note.content) || 'Empty note...');
+    const displayTags = isLockedAndHidden ? [] : note.tags;
+
     const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric'
@@ -663,15 +684,17 @@ class AstralNotesApp {
     return `
       <article class="note-card" data-id="${note.id}" ${borderStyle}>
         <div class="note-card-header">
-          <h3 class="note-card-title">${note.title || 'Untitled'}</h3>
-          <button class="pin-btn ${note.isPinned ? 'active' : ''}" title="${note.isPinned ? 'Unpin' : 'Pin'}">
-            ${getIconSvg('pin', 16)}
-          </button>
+          <h3 class="note-card-title">${displayTitle}</h3>
+          ${!isLockedAndHidden ? `
+            <button class="pin-btn ${note.isPinned ? 'active' : ''}" title="${note.isPinned ? 'Unpin' : 'Pin'}">
+              ${getIconSvg('pin', 16)}
+            </button>
+          ` : ''}
         </div>
-        <div class="note-card-snippet markdown-preview">${renderMarkdown(note.content) || 'Empty note...'}</div>
-        ${note.tags.length > 0 ? `
+        <div class="note-card-snippet markdown-preview">${displaySnippet}</div>
+        ${displayTags.length > 0 ? `
           <div class="note-card-tags">
-            ${note.tags.map(t => `<span class="tag-chip">#${t}</span>`).join('')}
+            ${displayTags.map(t => `<span class="tag-chip">#${t}</span>`).join('')}
           </div>
         ` : ''}
         <div class="note-card-footer">
@@ -1126,7 +1149,28 @@ class AstralNotesApp {
         await this.togglePin(note);
         break;
       case 'vault':
-        note.isLocked = !note.isLocked;
+        if (note.isLocked) {
+          if (!vaultManager.isUnlocked()) {
+            this.showToast('Unlock your private vault first to move notes out of the vault');
+            this.navigateTo('VAULT');
+            return;
+          }
+          note.isLocked = false;
+        } else {
+          const hasVault = await vaultManager.checkVaultExists();
+          if (!hasVault) {
+            this.showToast('Please set up your private vault first');
+            this.navigateTo('VAULT');
+            return;
+          }
+          if (!vaultManager.isUnlocked()) {
+            this.showToast('Please unlock your private vault first');
+            this.navigateTo('VAULT');
+            return;
+          }
+          note.isLocked = true;
+          note.isPinned = false;
+        }
         note.updatedAt = Date.now();
         await syncEngine.uploadNote(note);
         this.render();

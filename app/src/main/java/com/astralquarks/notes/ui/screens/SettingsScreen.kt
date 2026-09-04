@@ -76,7 +76,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.astralquarks.notes.ai.GeminiManager
 import com.astralquarks.notes.auth.AuthManager
-import com.astralquarks.notes.security.VaultAuthMode
 import com.astralquarks.notes.security.VaultSecurityManager
 import com.astralquarks.notes.ui.components.VaultAuthDialog
 import com.astralquarks.notes.ui.theme.AppColorPalette
@@ -94,7 +93,6 @@ fun SettingsScreen(
     authManager: AuthManager,
     onOpenDrawer: () -> Unit,
     onManualSync: () -> Unit,
-    onTriggerBiometric: (onSuccess: () -> Unit) -> Unit,
     onGetAllNotesForBackup: suspend () -> List<Note>,
     onImportNotesBatch: (List<Note>, () -> Unit) -> Unit,
     modifier: Modifier = Modifier
@@ -108,7 +106,6 @@ fun SettingsScreen(
 
     var showPasswordChangeDialog by remember { mutableStateOf(false) }
     var vaultAuthenticatedForChange by remember { mutableStateOf(false) }
-    var currentAuthMode by remember { mutableStateOf(vaultSecurityManager.getAuthMode()) }
 
     var customApiKey by remember { mutableStateOf(geminiManager.customApiKey) }
     var customModelName by remember { mutableStateOf(geminiManager.customModelName) }
@@ -511,75 +508,9 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "Customize unlock methods for hidden locked notes. Android device screen lock is strictly disabled in favor of dedicated custom security.",
+                        text = "Your private vault encrypts hidden notes using a dedicated master password separate from your Google account.",
                         style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    // Mode 1: Custom Password Only
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = currentAuthMode == VaultAuthMode.PASSWORD_ONLY,
-                            onClick = {
-                                currentAuthMode = VaultAuthMode.PASSWORD_ONLY
-                                vaultSecurityManager.setAuthMode(VaultAuthMode.PASSWORD_ONLY)
-                            },
-                            modifier = Modifier.testTag("mode_password_only")
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text("Custom Password Only", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Unlock using your custom alphanumeric PIN or password.", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-                        }
-                    }
-
-                    // Mode 2: Biometric Only
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = currentAuthMode == VaultAuthMode.BIOMETRIC_ONLY,
-                            onClick = {
-                                if (vaultSecurityManager.isBiometricAvailable()) {
-                                    currentAuthMode = VaultAuthMode.BIOMETRIC_ONLY
-                                    vaultSecurityManager.setAuthMode(VaultAuthMode.BIOMETRIC_ONLY)
-                                } else {
-                                    Toast.makeText(context, "Biometrics not available on this device", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier.testTag("mode_biometric_only")
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text("Biometric Only (Fingerprint)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Quick biometric sensor authentication without password prompt.", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-                        }
-                    }
-
-                    // Mode 3: Custom Password with Biometric
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = currentAuthMode == VaultAuthMode.PASSWORD_AND_BIOMETRIC,
-                            onClick = {
-                                currentAuthMode = VaultAuthMode.PASSWORD_AND_BIOMETRIC
-                                vaultSecurityManager.setAuthMode(VaultAuthMode.PASSWORD_AND_BIOMETRIC)
-                            },
-                            modifier = Modifier.testTag("mode_password_and_biometric")
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text("Custom Password + Biometric", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Authenticate with either biometric fingerprint or custom password.", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -912,11 +843,8 @@ fun SettingsScreen(
         if (vaultSecurityManager.isPasswordSet() && !vaultAuthenticatedForChange) {
             VaultAuthDialog(
                 isPasswordSet = true,
-                authMode = currentAuthMode,
-                isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
                 onVerifyPassword = { vaultSecurityManager.verifyPassword(it) },
                 onSetPassword = { Result.success(Unit) },
-                onTriggerBiometric = onTriggerBiometric,
                 onDismiss = { showPasswordChangeDialog = false },
                 onSuccess = {
                     vaultAuthenticatedForChange = true
@@ -925,8 +853,6 @@ fun SettingsScreen(
         } else {
             VaultAuthDialog(
                 isPasswordSet = false,
-                authMode = currentAuthMode,
-                isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
                 onVerifyPassword = { Result.success(true) },
                 onSetPassword = { newPass ->
                     val res = vaultSecurityManager.setPassword(newPass)
@@ -937,7 +863,6 @@ fun SettingsScreen(
                     }
                     res
                 },
-                onTriggerBiometric = onTriggerBiometric,
                 onDismiss = {
                     showPasswordChangeDialog = false
                     vaultAuthenticatedForChange = false

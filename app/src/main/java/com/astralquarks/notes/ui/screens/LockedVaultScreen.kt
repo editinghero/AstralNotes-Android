@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
@@ -54,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.astralquarks.notes.model.Note
-import com.astralquarks.notes.security.VaultAuthMode
 import com.astralquarks.notes.security.VaultSecurityManager
 import com.astralquarks.notes.ui.components.NoteCard
 import com.astralquarks.notes.ui.components.VaultAuthDialog
@@ -71,7 +69,6 @@ fun LockedVaultScreen(
     onUnlockToPublic: (Note) -> Unit,
     onPermanentlyDelete: (Note) -> Unit,
     onRelockVault: () -> Unit,
-    onTriggerBiometric: (onSuccess: () -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showAuthDialog by remember { mutableStateOf(!isVaultUnlocked) }
@@ -205,24 +202,6 @@ fun LockedVaultScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(if (!vaultSecurityManager.isPasswordSet()) "Set Password" else "Unlock Vault")
                         }
-
-                        if (vaultSecurityManager.isPasswordSet() &&
-                            vaultSecurityManager.isBiometricAvailable() &&
-                            vaultSecurityManager.getAuthMode() != VaultAuthMode.PASSWORD_ONLY
-                        ) {
-                            FilledTonalButton(
-                                onClick = { onTriggerBiometric { vaultSecurityManager.unlockVault() } },
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth(0.7f)
-                                    .height(48.dp)
-                                    .testTag("vault_biometric_quick_button")
-                            ) {
-                                Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Biometric Unlock")
-                            }
-                        }
                     }
                 }
             } else {
@@ -283,11 +262,8 @@ fun LockedVaultScreen(
         val isExistingVault = (hasRemoteVault == true) || vaultSecurityManager.isPasswordSet()
         VaultAuthDialog(
             isPasswordSet = isExistingVault,
-            authMode = vaultSecurityManager.getAuthMode(),
-            isBiometricAvailable = vaultSecurityManager.isBiometricAvailable(),
             onVerifyPassword = { password -> vaultSecurityManager.unlockWithPassword(password) },
             onSetPassword = { password -> vaultSecurityManager.setupNewVault(password) },
-            onTriggerBiometric = onTriggerBiometric,
             onDismiss = { showAuthDialog = false },
             onSuccess = {
                 showAuthDialog = false
