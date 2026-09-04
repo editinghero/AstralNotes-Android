@@ -99,8 +99,13 @@ class AstralNotesApp {
   }
 
   private initTheme(): void {
+    const urlParams = new URLSearchParams(window.location.search);
+    const themeFromUrl = urlParams.get('theme') as ThemeId | null;
     const saved = localStorage.getItem('cn:theme') as ThemeId;
-    if (saved && ['peach', 'mauve', 'teal', 'sky'].includes(saved)) {
+    if (themeFromUrl && ['peach', 'mauve', 'teal', 'sky'].includes(themeFromUrl)) {
+      this.currentTheme = themeFromUrl;
+      localStorage.setItem('cn:theme', themeFromUrl);
+    } else if (saved && ['peach', 'mauve', 'teal', 'sky'].includes(saved)) {
       this.currentTheme = saved;
     } else {
       this.currentTheme = 'peach';
@@ -127,9 +132,27 @@ class AstralNotesApp {
 
     const favicon = document.getElementById('app-favicon') as HTMLLinkElement | null;
     if (favicon) {
-      const encodedColor = encodeURIComponent(theme.primary);
-      favicon.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='64' height='64' fill='none' stroke='${encodedColor}' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(1.2, 1.2) scale(0.9)'%3E%3Cpath d='M18 2l4 4M2 22l1.276-4.68c.083-.305.125-.458.189-.6.057-.127.126-.247.208-.359.092-.126.204-.238.428-.462L14.434 5.566c.198-.198.297-.297.411-.334.1-.033.209-.033.309 0 .114.037.213.136.411.334l2.869 2.869c.198.198.297-.297.334.411.033.1.033.209 0 .309-.037.114-.136.213-.334.411L8.1 19.899c-.224.224-.336.336-.462.428-.112.082-.232.151-.359.208-.142.064-.295.106-.6.189L2 22z'/%3E%3C/g%3E%3C/svg%3E`;
+      favicon.href = `/icons/${theme.id}/favicon.svg`;
     }
+
+    let appleTouchIcon = document.getElementById('app-apple-touch-icon') as HTMLLinkElement | null;
+    if (!appleTouchIcon) {
+      appleTouchIcon = document.createElement('link');
+      appleTouchIcon.id = 'app-apple-touch-icon';
+      appleTouchIcon.rel = 'apple-touch-icon';
+      document.head.appendChild(appleTouchIcon);
+    }
+    appleTouchIcon.href = `/icons/${theme.id}/apple-touch-icon.png`;
+
+    const oldManifest = document.getElementById('app-manifest');
+    if (oldManifest) {
+      oldManifest.remove();
+    }
+    const newManifest = document.createElement('link');
+    newManifest.id = 'app-manifest';
+    newManifest.rel = 'manifest';
+    newManifest.href = `/manifest-${theme.id}.json`;
+    document.head.appendChild(newManifest);
   }
 
   private updateThemeButtons(): void {
@@ -145,6 +168,12 @@ class AstralNotesApp {
   }
 
   private async init(): Promise<void> {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('Service worker registration failed:', err);
+      });
+    }
+
     const hash = window.location.hash;
     if (hash.startsWith('#/share/')) {
       const shareId = hash.replace('#/share/', '').trim();
