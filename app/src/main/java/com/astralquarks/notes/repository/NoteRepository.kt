@@ -137,11 +137,15 @@ class NoteRepository(
 
             for (cloudNote in cloudNotes) {
                 val localNote = localNotesMap[cloudNote.id]
+                val isPlaceholder = localNote?.title == "[Locked Note]" || localNote?.title == "[Encrypted Note]"
+                val isCloudDecrypted = cloudNote.title != "[Locked Note]" && cloudNote.title != "[Encrypted Note]"
                 if (localNote == null) {
+                    toInsertOrUpdate.add(cloudNote)
+                } else if (isPlaceholder && isCloudDecrypted) {
                     toInsertOrUpdate.add(cloudNote)
                 } else if (cloudNote.updatedAt > localNote.updatedAt) {
                     toInsertOrUpdate.add(cloudNote)
-                } else if (localNote.updatedAt > cloudNote.updatedAt) {
+                } else if (localNote.updatedAt > cloudNote.updatedAt && !isPlaceholder) {
                     toUpload.add(localNote)
                 }
             }

@@ -21,7 +21,7 @@ export interface VaultMetaConfig {
   updatedAt: number;
 }
 
-type VaultListener = (isUnlocked: boolean) => void;
+type VaultListener = (isUnlocked: boolean) => void | Promise<void>;
 
 class VaultManager {
   private inMemoryVaultKey: CryptoKey | null = null;
@@ -44,8 +44,14 @@ class VaultManager {
     };
   }
 
-  private notifyListeners(): void {
-    this.listeners.forEach(l => l(this.isVaultUnlocked));
+  public async notifyListeners(): Promise<void> {
+    for (const l of this.listeners) {
+      try {
+        await l(this.isVaultUnlocked);
+      } catch (err) {
+        console.error('Vault listener error:', err);
+      }
+    }
   }
 
   public async checkVaultExists(): Promise<boolean> {
@@ -126,7 +132,7 @@ class VaultManager {
 
     this.inMemoryVaultKey = vmk;
     this.isVaultUnlocked = true;
-    this.notifyListeners();
+    await this.notifyListeners();
   }
 
   public async unlockVault(password: string): Promise<boolean> {
@@ -191,7 +197,7 @@ class VaultManager {
       if (token === VERIFY_TOKEN) {
         this.inMemoryVaultKey = vmk;
         this.isVaultUnlocked = true;
-        this.notifyListeners();
+        await this.notifyListeners();
         return true;
       } else {
         throw new Error('Incorrect vault password.');
@@ -204,7 +210,7 @@ class VaultManager {
   public lockVault(): void {
     this.inMemoryVaultKey = null;
     this.isVaultUnlocked = false;
-    this.notifyListeners();
+    void this.notifyListeners();
   }
 }
 

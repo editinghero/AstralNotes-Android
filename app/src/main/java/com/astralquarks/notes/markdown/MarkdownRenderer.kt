@@ -81,31 +81,40 @@ fun MarkdownRenderer(
     markdown: String,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier,
+    isSnippetPreview: Boolean = false,
     onChecklistToggle: ((TaskItem) -> Unit)? = null
 ) {
-    val blocks = remember(markdown) { MarkdownParser.parse(markdown) }
+    val contentToParse = remember(markdown, isSnippetPreview) {
+        if (isSnippetPreview && markdown.length > 300) {
+            markdown.take(300)
+        } else {
+            markdown
+        }
+    }
+    val blocks = remember(contentToParse) { MarkdownParser.parse(contentToParse) }
+    val displayBlocks = if (isSnippetPreview) blocks.take(4) else blocks
 
     CompositionLocalProvider(LocalContentColor provides textColor) {
         Column(
             modifier = modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(if (isSnippetPreview) 4.dp else 10.dp)
         ) {
-            blocks.forEach { block ->
+            displayBlocks.forEach { block ->
                 when (block) {
-                    is MarkdownBlock.Heading -> HeadingBlockView(block, textColor)
-                    is MarkdownBlock.Paragraph -> ParagraphBlockView(block.text, textColor)
-                    is MarkdownBlock.Blockquote -> BlockquoteBlockView(block)
-                    is MarkdownBlock.CodeBlock -> CodeBlockView(block)
+                    is MarkdownBlock.Heading -> HeadingBlockView(block, textColor, isSnippetPreview)
+                    is MarkdownBlock.Paragraph -> ParagraphBlockView(block.text, textColor, isSnippetPreview)
+                    is MarkdownBlock.Blockquote -> if (!isSnippetPreview) BlockquoteBlockView(block) else Text(text = block.lines.joinToString(" "), style = MaterialTheme.typography.bodyMedium.copy(color = textColor), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    is MarkdownBlock.CodeBlock -> if (!isSnippetPreview) CodeBlockView(block) else Text(text = block.code, style = MaterialTheme.typography.bodySmall.copy(color = textColor, fontFamily = FontFamily.Monospace), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     is MarkdownBlock.BulletList -> BulletListView(block.items, textColor)
                     is MarkdownBlock.NumberedList -> NumberedListView(block.items, textColor)
                     is MarkdownBlock.TaskList -> TaskListView(block.items, onChecklistToggle, textColor)
-                    is MarkdownBlock.Table -> TableBlockView(block, textColor)
-                    is MarkdownBlock.HorizontalRule -> HorizontalDivider(
+                    is MarkdownBlock.Table -> if (!isSnippetPreview) TableBlockView(block, textColor) else null
+                    is MarkdownBlock.HorizontalRule -> if (!isSnippetPreview) HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp),
                         color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                    is MarkdownBlock.ImageBlock -> ImageBlockView(block.alt, block.url)
-                    is MarkdownBlock.Details -> DetailsBlockView(block, textColor, onChecklistToggle)
+                    ) else null
+                    is MarkdownBlock.ImageBlock -> if (!isSnippetPreview) ImageBlockView(block.alt, block.url) else null
+                    is MarkdownBlock.Details -> if (!isSnippetPreview) DetailsBlockView(block, textColor, onChecklistToggle) else null
                 }
             }
         }
@@ -113,7 +122,24 @@ fun MarkdownRenderer(
 }
 
 @Composable
-private fun HeadingBlockView(heading: MarkdownBlock.Heading, textColor: Color = MaterialTheme.colorScheme.onSurface) {
+private fun HeadingBlockView(
+    heading: MarkdownBlock.Heading,
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    isSnippetPreview: Boolean = false
+) {
+    if (isSnippetPreview) {
+        Text(
+            text = heading.text,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.Normal,
+                color = textColor
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        return
+    }
+
     val style = when (heading.level) {
         1 -> MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = textColor)
         2 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = textColor)
@@ -130,9 +156,26 @@ private fun HeadingBlockView(heading: MarkdownBlock.Heading, textColor: Color = 
 }
 
 @Composable
-private fun ParagraphBlockView(text: String, textColor: Color = MaterialTheme.colorScheme.onSurface) {
+private fun ParagraphBlockView(
+    text: String,
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    isSnippetPreview: Boolean = false
+) {
     val context = LocalContext.current
-    val annotatedString = rememberInlineMarkdown(text)
+    val annotatedString = rememberInlineMarkdown(text, isSnippetPreview)
+
+    if (isSnippetPreview) {
+        Text(
+            text = annotatedString,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                color = textColor,
+                lineHeight = 20.sp
+            ),
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis
+        )
+        return
+    }
 
     ClickableText(
         text = annotatedString,
@@ -529,13 +572,13 @@ private fun ImageBlockView(alt: String, url: String) {
 }
 
 @Composable
-fun rememberInlineMarkdown(text: String): AnnotatedString {
+fun rememberInlineMarkdown(text: String, isSnippetPreview: Boolean = false): AnnotatedString {
     val primaryColor = MaterialTheme.colorScheme.primary
     val codeBgColor = MaterialTheme.colorScheme.surfaceVariant
     val highlightBgColor = Color(0xFFFFF176) // Yellow highlight
     val highlightTextColor = Color(0xFF1E1F24)
 
-    return remember(text, primaryColor, codeBgColor) {
+    return remember(text, primaryColor, codeBgColor, isSnippetPreview) {
         buildAnnotatedString {
             // Regex token matcher for bold (**text**), italic (*text*), strikethrough (~~text~~),
             // highlight (==text==), inline code (`code`), link ([text](url))
@@ -561,17 +604,21 @@ fun rememberInlineMarkdown(text: String): AnnotatedString {
                     fullMatch.startsWith("[") && fullMatch.contains("](") -> {
                         val linkText = match.groupValues[11]
                         val linkUrl = match.groupValues[12]
-                        pushStringAnnotation(tag = "URL", annotation = linkUrl)
-                        withStyle(
-                            SpanStyle(
-                                color = primaryColor,
-                                textDecoration = TextDecoration.Underline,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        ) {
+                        if (!isSnippetPreview) {
+                            pushStringAnnotation(tag = "URL", annotation = linkUrl)
+                            withStyle(
+                                SpanStyle(
+                                    color = primaryColor,
+                                    textDecoration = TextDecoration.Underline,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            ) {
+                                append(linkText)
+                            }
+                            pop()
+                        } else {
                             append(linkText)
                         }
-                        pop()
                     }
                     // Bold: **text** or __text__
                     fullMatch.startsWith("**") || fullMatch.startsWith("__") -> {

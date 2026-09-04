@@ -75,6 +75,8 @@ class SyncEngine {
     return this.currentKey;
   }
 
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   public async startRealtimeSync(onNotesReceived?: (notes: Note[]) => void): Promise<void> {
     this.stopRealtimeSync();
 
@@ -90,89 +92,102 @@ class SyncEngine {
 
     this.unsubscribeFirestore = onSnapshot(
       notesCol,
-      async (snapshot) => {
-        const cloudNotes: Note[] = [];
+      (snapshot) => {
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+        }
 
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data() as DocumentData;
-          let title = typeof data.title === 'string' ? data.title : '';
-          let content = typeof data.content === 'string' ? data.content : '';
-          let tags = Array.isArray(data.tags) ? data.tags : [];
-          let imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : [];
-
-          const isEncrypted = Boolean(data.isEncrypted);
-          const encryptedData = typeof data.encryptedData === 'string' ? data.encryptedData : undefined;
-          const iv = typeof data.iv === 'string' ? data.iv : undefined;
-
-          if (isEncrypted && encryptedData && iv) {
+        this.debounceTimer = setTimeout(async () => {
+          try {
+            const cloudNotes: Note[] = [];
             const vaultKey = vaultManager.getVaultKey();
-            let decrypted = false;
 
-            if (vaultKey) {
-              try {
-                const payload = await decryptNotePayload(encryptedData, iv, vaultKey);
-                title = payload.title;
-                content = payload.content;
-                tags = payload.tags;
-                imageUrls = payload.imageUrls;
-                decrypted = true;
-              } catch {}
-            }
+            for (const docSnap of snapshot.docs) {
+              const data = docSnap.data() as DocumentData;
+              let title = typeof data.title === 'string' ? data.title : '';
+              let content = typeof data.content === 'string' ? data.content : '';
+              let tags = Array.isArray(data.tags) ? data.tags : [];
+              let imageUrls = Array.isArray(data.imageUrls) ? data.imageUrls : [];
 
-            if (!decrypted) {
-              try {
-                const payload = await decryptNotePayload(encryptedData, iv, key);
-                title = payload.title;
-                content = payload.content;
-                tags = payload.tags;
-                imageUrls = payload.imageUrls;
-                decrypted = true;
-              } catch {}
-            }
+              const isEncrypted = Boolean(data.isEncrypted);
+              const encryptedData = typeof data.encryptedData === 'string' ? data.encryptedData : undefined;
+              const iv = typeof data.iv === 'string' ? data.iv : undefined;
 
-            if (!decrypted) {
-              if (data.isLocked && !vaultManager.isUnlocked()) {
-                title = '[Locked Note]';
-                content = 'Unlock your private vault to view this encrypted note.';
-              } else {
-                title = '[Encrypted Note]';
-                content = 'Encrypted with a different vault key.';
+              if (isEncrypted && encryptedData && iv) {
+                let decrypted = false;
+
+                if (vaultKey) {
+                  try {
+                    const payload = await decryptNotePayload(encryptedData, iv, vaultKey);
+                    title = payload.title;
+                    content = payload.content;
+                    tags = payload.tags;
+                    imageUrls = payload.imageUrls;
+                    decrypted = true;
+                  } catch (err) {
+                    console.warn('Vault decryption attempt failed for note:', docSnap.id, err);
+                  }
+                }
+
+                if (!decrypted) {
+                  try {
+                    const payload = await decryptNotePayload(encryptedData, iv, key);
+                    title = payload.title;
+                    content = payload.content;
+                    tags = payload.tags;
+                    imageUrls = payload.imageUrls;
+                    decrypted = true;
+                  } catch {}
+                }
+
+                if (!decrypted) {
+                  if (data.isLocked && !vaultManager.isUnlocked()) {
+                    title = '[Locked Note]';
+                    content = 'Unlock your private vault to view this encrypted note.';
+                  } else {
+                    title = '[Encrypted Note]';
+                    content = 'Encrypted with a different vault key.';
+                  }
+                }
               }
+
+              cloudNotes.push({
+                id: docSnap.id,
+                title,
+                content,
+                colorHex: data.colorHex || '#DEFAULT',
+                isPinned: Boolean(data.isPinned),
+                isArchived: Boolean(data.isArchived),
+                isLocked: Boolean(data.isLocked),
+                isTrash: Boolean(data.isTrash),
+                tags,
+                imageUrls,
+                reminderTime: typeof data.reminderTime === 'number' ? data.reminderTime : null,
+                createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
+                updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
+                revision: typeof data.revision === 'number' ? data.revision : 1,
+                deviceId: typeof data.deviceId === 'string' ? data.deviceId : 'web',
+                isDeleted: Boolean(data.isDeleted),
+                isSynced: true,
+                isEncrypted,
+                encryptedData,
+                iv
+              });
             }
+
+            const activeCloudNotes = cloudNotes.filter(n => n && !n.isDeleted);
+            await saveLocalNotesBatch(activeCloudNotes);
+            this.setStatus('SYNCED');
+
+            if (onNotesReceived) {
+              onNotesReceived(activeCloudNotes);
+            }
+            this.notesListeners.forEach(l => l(activeCloudNotes));
+          } catch (err) {
+            console.error('Error processing Firestore snapshot:', err);
+            this.setStatus('ERROR');
           }
-
-          cloudNotes.push({
-            id: docSnap.id,
-            title,
-            content,
-            colorHex: data.colorHex || '#DEFAULT',
-            isPinned: Boolean(data.isPinned),
-            isArchived: Boolean(data.isArchived),
-            isLocked: Boolean(data.isLocked),
-            isTrash: Boolean(data.isTrash),
-            tags,
-            imageUrls,
-            reminderTime: typeof data.reminderTime === 'number' ? data.reminderTime : null,
-            createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
-            updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : Date.now(),
-            revision: typeof data.revision === 'number' ? data.revision : 1,
-            deviceId: typeof data.deviceId === 'string' ? data.deviceId : 'web',
-            isDeleted: Boolean(data.isDeleted),
-            isSynced: true,
-            isEncrypted,
-            encryptedData,
-            iv
-          });
-        }
-
-        const activeCloudNotes = cloudNotes.filter(n => n && !n.isDeleted);
-        await saveLocalNotesBatch(activeCloudNotes);
-        this.setStatus('SYNCED');
-
-        if (onNotesReceived) {
-          onNotesReceived(activeCloudNotes);
-        }
-        this.notesListeners.forEach(l => l(activeCloudNotes));
+        }, 150);
       },
       (error) => {
         console.error('Firestore V2 sync error:', error);
@@ -185,6 +200,7 @@ class SyncEngine {
     const vaultKey = vaultManager.getVaultKey();
     const userKey = await this.getOrCreateUserKey();
     const result: Note[] = [];
+    const decryptedBatch: Note[] = [];
 
     for (const note of notes) {
       if (!note) continue;
@@ -203,7 +219,9 @@ class SyncEngine {
             tags = payload.tags;
             imageUrls = payload.imageUrls;
             decrypted = true;
-          } catch {}
+          } catch (err) {
+            console.warn('redecryptNotes failed with vaultKey for note:', note.id, err);
+          }
         }
 
         if (!decrypted) {
@@ -217,17 +235,30 @@ class SyncEngine {
           } catch {}
         }
 
-        result.push({
+        const updatedNote: Note = {
           ...note,
           title: decrypted ? title : (note.isLocked && !vaultManager.isUnlocked() ? '[Locked Note]' : note.title),
           content: decrypted ? content : (note.isLocked && !vaultManager.isUnlocked() ? 'Unlock your private vault to view this encrypted note.' : note.content),
           tags: decrypted ? tags : note.tags,
           imageUrls: decrypted ? imageUrls : note.imageUrls
-        });
+        };
+        result.push(updatedNote);
+        if (decrypted) {
+          decryptedBatch.push(updatedNote);
+        }
       } else {
         result.push(note);
       }
     }
+
+    if (decryptedBatch.length > 0) {
+      try {
+        await saveLocalNotesBatch(decryptedBatch);
+      } catch (e) {
+        console.warn('Could not cache decrypted notes locally:', e);
+      }
+    }
+
     return result;
   }
 
@@ -239,10 +270,9 @@ class SyncEngine {
   }
 
   public async uploadNote(note: Note): Promise<void> {
-    await saveLocalNote(note);
-
     const user = auth.currentUser;
     if (!user) {
+      await saveLocalNote(note);
       this.setStatus('OFFLINE_PENDING');
       return;
     }
@@ -252,7 +282,11 @@ class SyncEngine {
       let payload: EncryptedNotePayload;
 
       if (note.isLocked) {
-        const key = vaultManager.getVaultKey() || (await this.getOrCreateUserKey());
+        const key = vaultManager.getVaultKey();
+        if (!key) {
+          throw new Error('Private vault is locked. Please unlock the vault to save encrypted notes.');
+        }
+
         const encrypted = await encryptNotePayload(
           {
             title: note.title,
@@ -262,6 +296,10 @@ class SyncEngine {
           },
           key
         );
+
+        note.isEncrypted = true;
+        note.encryptedData = encrypted.encryptedData;
+        note.iv = encrypted.iv;
 
         payload = {
           id: note.id,
@@ -280,10 +318,11 @@ class SyncEngine {
           encryptedData: encrypted.encryptedData,
           iv: encrypted.iv
         };
-        note.isEncrypted = true;
-        note.encryptedData = encrypted.encryptedData;
-        note.iv = encrypted.iv;
       } else {
+        note.isEncrypted = false;
+        note.encryptedData = undefined;
+        note.iv = undefined;
+
         payload = {
           id: note.id,
           revision: note.revision + 1,
@@ -305,12 +344,14 @@ class SyncEngine {
         };
       }
 
+      await saveLocalNote(note);
       const docRef = doc(db, 'user', user.uid, 'notes', note.id);
       await setDoc(docRef, payload, { merge: true });
       this.setStatus('SYNCED');
     } catch (e) {
       console.error('Failed to upload note to Firestore V2:', e);
       this.setStatus('ERROR');
+      throw e;
     }
   }
 

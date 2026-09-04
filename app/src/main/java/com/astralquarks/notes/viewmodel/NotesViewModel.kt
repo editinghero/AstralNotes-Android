@@ -24,8 +24,8 @@ import kotlinx.coroutines.launch
 class NotesViewModel(private val application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
-    val authManager = AuthManager(application)
     val vaultSecurityManager = VaultSecurityManager(application)
+    val authManager = AuthManager(application, vaultSecurityManager)
     val geminiManager = GeminiManager(application)
     val repository = NoteRepository(db.noteDao(), authManager, viewModelScope)
 
@@ -70,6 +70,15 @@ class NotesViewModel(private val application: Application) : AndroidViewModel(ap
                     vaultSecurityManager.checkVaultExists()
                     repository.syncAllWithCloud()
                     QuickNoteWidgetProvider.updateAllWidgets(application)
+                }
+            }
+        }
+
+        // When vault is unlocked, re-sync to decrypt any cloud locked notes locally
+        viewModelScope.launch {
+            vaultSecurityManager.isVaultUnlocked.collect { unlocked ->
+                if (unlocked && authManager.isSignedIn) {
+                    repository.syncAllWithCloud()
                 }
             }
         }

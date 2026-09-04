@@ -243,6 +243,7 @@ fun NoteCard(
                         MarkdownRenderer(
                             markdown = note.content,
                             textColor = secondaryTextColor,
+                            isSnippetPreview = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

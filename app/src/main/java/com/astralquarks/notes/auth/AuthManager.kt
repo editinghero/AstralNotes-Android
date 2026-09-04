@@ -10,6 +10,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.astralquarks.notes.model.Note
 import com.astralquarks.notes.security.CryptoEngine
+import com.astralquarks.notes.security.VaultSecurityManager
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
@@ -37,7 +38,7 @@ enum class SyncStatus {
     ERROR
 }
 
-class AuthManager(private val context: Context) {
+class AuthManager(private val context: Context, var vaultSecurityManager: VaultSecurityManager? = null) {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -173,9 +174,17 @@ class AuthManager(private val context: Context) {
         }
     }
 
+    fun getEffectiveKey(forLockedNote: Boolean = false): SecretKey? {
+        if (forLockedNote) {
+            val vKey = vaultSecurityManager?.getVaultKey()
+            if (vKey != null) return vKey
+        }
+        return getEncryptionKey()
+    }
+
     /**
-     * Uploads note to new V2 Firestore path: user/{uid}/notes/{noteId}
-     * Sensitive fields (title, content, tags) are client-side encrypted before writing.
+     * Uploads single note to new V2 Firestore path: user/{uid}/notes/{noteId}
+     * Note data is client-side encrypted before network transit.
      * The legacy `users` collection is completely untouched.
      */
     suspend fun uploadNoteToFirestore(note: Note): Boolean {
@@ -183,7 +192,7 @@ class AuthManager(private val context: Context) {
         return try {
             _isSyncing.value = true
             _syncStatus.value = SyncStatus.SYNCING
-            val key = if (note.isLocked) getEncryptionKey() else null
+            val key = if (note.isLocked) getEffectiveKey(true) else null
             firestore.collection("user")
                 .document(uid)
                 .collection("notes")
@@ -214,7 +223,7 @@ class AuthManager(private val context: Context) {
             _syncStatus.value = SyncStatus.SYNCING
             val batch = firestore.batch()
             for (note in notes) {
-                val key = if (note.isLocked) getEncryptionKey() else null
+                val key = if (note.isLocked) getEffectiveKey(true) else null
                 val docRef = firestore.collection("user")
                     .document(uid)
                     .collection("notes")
@@ -244,7 +253,7 @@ class AuthManager(private val context: Context) {
         return try {
             _isSyncing.value = true
             _syncStatus.value = SyncStatus.SYNCING
-            val key = getEncryptionKey()
+            val key = getEffectiveKey(true)
             val snapshot = firestore.collection("user")
                 .document(uid)
                 .collection("notes")
@@ -309,7 +318,7 @@ class AuthManager(private val context: Context) {
             callbackFlow {
                 var registration: ListenerRegistration? = null
                 try {
-                    val key = getEncryptionKey()
+                    val key = getEffectiveKey(true)
                     registration = firestore.collection("user")
                         .document(uid)
                         .collection("notes")

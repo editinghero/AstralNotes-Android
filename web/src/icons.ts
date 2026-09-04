@@ -43,10 +43,12 @@ import {
   Download,
   Printer,
   Clock,
-  Link2
+  Link2,
+  Settings
 } from 'lucide';
 
 const ICONS: Record<string, unknown> = {
+  settings: Settings,
   search: Search,
   menu: Menu,
   plus: Plus,
@@ -108,9 +110,8 @@ export function getIconSvg(name: string, size = 18, className = ''): string {
 export function getLogoSvg(size = 32, className = ''): string {
   return `<svg viewBox="0 0 512 512" width="${size}" height="${size}" class="${className}" role="img" aria-label="Astral Notes">
     <rect width="512" height="512" rx="112" fill="currentColor" fill-opacity="0.16" />
-    <path d="M186 226v-34a70 70 0 0 1 140 0v34" fill="none" stroke="currentColor" stroke-width="34" stroke-linecap="round" />
-    <rect x="152" y="226" width="208" height="160" rx="44" fill="currentColor" />
-    <circle cx="256" cy="292" r="20" fill="var(--background)" />
-    <rect x="246" y="300" width="20" height="46" rx="10" fill="var(--background)" />
+    <g transform="translate(106, 106) scale(12.5)">
+      <path d="M18,2 L22,6 M2,22 L3.2764,17.3199 C3.35968,17.0145 3.40131,16.8619 3.46523,16.7195 C3.52199,16.5931 3.59172,16.4729 3.67332,16.3609 C3.76521,16.2348 3.87711,16.1229 4.1009,15.8991 L14.4343,5.56569 C14.6323,5.36768 14.7313,5.26867 14.8455,5.23158 C14.9459,5.19895 15.0541,5.19895 15.1545,5.23158 C15.2687,5.26867 15.3677,5.36768 15.5657,5.56569 L18.4343,8.43431 C18.6323,8.63232 18.7313,8.73133 18.7684,8.84549 C18.8011,8.94591 18.8011,9.05409 18.7684,9.15451 C18.7313,9.26867 18.6323,9.36768 18.4343,9.56569 L8.1009,19.8991 C7.87711,20.1229 7.76521,20.2348 7.63908,20.3267 C7.52709,20.4083 7.40692,20.478 7.28052,20.5348 C7.13815,20.5987 6.98548,20.6403 6.68014,20.7236 L2,22 Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
   </svg>`;
 }
