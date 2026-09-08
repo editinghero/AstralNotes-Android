@@ -7,8 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
@@ -101,7 +99,6 @@ fun InteractiveMarkdownEditor(
 ) {
     val context = LocalContext.current
     var showInteractiveChecklistOverlay by remember { mutableStateOf(false) }
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val coroutineScope = rememberCoroutineScope()
 
 
@@ -328,12 +325,6 @@ fun InteractiveMarkdownEditor(
 
                 var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
 
-        LaunchedEffect(value.selection) {
-            val cursorRect = textLayoutResult?.getCursorRect(value.selection.start)
-            if (cursorRect != null) {
-                bringIntoViewRequester.bringIntoView(cursorRect)
-            }
-        }
 
         // Live Markdown Input Field with Instant Synchronous Save & Auto-Continuations
         BasicTextField(
@@ -375,7 +366,6 @@ fun InteractiveMarkdownEditor(
             },
 
             modifier = Modifier
-                .bringIntoViewRequester(bringIntoViewRequester)
                 .fillMaxWidth()
                 .testTag("note_content_input")
         )
