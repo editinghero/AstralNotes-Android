@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -146,7 +147,15 @@ fun MarkdownRenderer(
                             editingBlockIndex = index
                         }
                     }
-                    Box(modifier = Modifier.doubleClick(onDoubleClickBlock)) {
+
+                    val boxModifier = if (block is MarkdownBlock.ImageBlock) {
+                        Modifier
+                    } else if (block is MarkdownBlock.Details) {
+                        Modifier
+                    } else {
+                        Modifier.doubleClick(onDoubleClickBlock)
+                    }
+                    Box(modifier = boxModifier) {
                         when (block) {
                     is MarkdownBlock.Heading -> HeadingBlockView(block, textColor, isSnippetPreview)
                     is MarkdownBlock.Paragraph -> ParagraphBlockView(block.text, textColor, isSnippetPreview)
@@ -161,7 +170,7 @@ fun MarkdownRenderer(
                         color = MaterialTheme.colorScheme.outlineVariant
                     ) else null
                     is MarkdownBlock.ImageBlock -> if (!isSnippetPreview) ImageBlockView(block.alt, block.url) else null
-                    is MarkdownBlock.Details -> if (!isSnippetPreview) DetailsBlockView(block, textColor, onChecklistToggle) else null
+                    is MarkdownBlock.Details -> if (!isSnippetPreview) DetailsBlockView(block, textColor, onChecklistToggle, onDoubleClickBlock) else null
                         }
                     }
                 }
@@ -723,7 +732,12 @@ fun rememberInlineMarkdown(text: String, isSnippetPreview: Boolean = false): Ann
 }
 
 @Composable
-private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onChecklistToggle: ((TaskItem) -> Unit)?) {
+private fun DetailsBlockView(
+    block: MarkdownBlock.Details,
+    textColor: Color,
+    onChecklistToggle: ((TaskItem) -> Unit)?,
+    onDoubleClick: (() -> Unit)? = null
+) {
     var isExpanded by remember { mutableStateOf(false) }
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -731,12 +745,12 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clickable { isExpanded = !isExpanded }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded }
             ) {
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowRight,
@@ -749,7 +763,12 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
                 )
             }
             AnimatedVisibility(visible = isExpanded) {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .let { if (onDoubleClick != null) it.doubleClick(onDoubleClick) else it }
+                ) {
                     MarkdownRenderer(
                         markdown = block.content,
                         textColor = textColor,
@@ -763,14 +782,15 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
 
 fun Modifier.doubleClick(onDoubleClick: () -> Unit): Modifier = this.pointerInput(Unit) {
     awaitEachGesture {
-        val down1 = awaitFirstDown(requireUnconsumed = false)
-        val up1 = waitForUpOrCancellation() ?: return@awaitEachGesture
+        val down1 = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val up1 = waitForUpOrCancellation(pass = PointerEventPass.Initial) ?: return@awaitEachGesture
 
-        val down2 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
+        val down2 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial) } ?: return@awaitEachGesture
         if ((down2.position - down1.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
-        val up2 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
+        val up2 = withTimeoutOrNull(300) { waitForUpOrCancellation(pass = PointerEventPass.Initial) } ?: return@awaitEachGesture
 
         if (up2 != null) {
+            up2.consume()
             onDoubleClick()
         }
     }
