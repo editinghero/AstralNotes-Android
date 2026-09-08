@@ -762,23 +762,20 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
 }
 
 fun Modifier.tripleClick(onTripleClick: () -> Unit): Modifier = this.pointerInput(Unit) {
-    var tapCount = 0
-    var lastTapTime = 0L
     awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val up = waitForUpOrCancellation()
-        if (up != null) {
-            val now = System.currentTimeMillis()
-            if (now - lastTapTime < 500) {
-                tapCount++
-            } else {
-                tapCount = 1
-            }
-            lastTapTime = now
-            if (tapCount == 3) {
-                onTripleClick()
-                tapCount = 0
-            }
+        val down1 = awaitFirstDown(requireUnconsumed = false)
+        val up1 = waitForUpOrCancellation() ?: return@awaitEachGesture
+
+        val down2 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
+        if ((down2.position - down1.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+        val up2 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
+
+        val down3 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
+        if ((down3.position - down2.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+        val up3 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
+
+        if (up3 != null) {
+            onTripleClick()
         }
     }
 }
