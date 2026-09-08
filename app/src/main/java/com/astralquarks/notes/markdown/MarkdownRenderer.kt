@@ -141,12 +141,12 @@ fun MarkdownRenderer(
                         }
                     }
                 } else {
-                    val onTripleClickBlock: () -> Unit = {
+                    val onDoubleClickBlock: () -> Unit = {
                         if (!isSnippetPreview && onBlockEdit != null) {
                             editingBlockIndex = index
                         }
                     }
-                    Box(modifier = Modifier.tripleClick(onTripleClickBlock)) {
+                    Box(modifier = Modifier.doubleClick(onDoubleClickBlock)) {
                         when (block) {
                     is MarkdownBlock.Heading -> HeadingBlockView(block, textColor, isSnippetPreview)
                     is MarkdownBlock.Paragraph -> ParagraphBlockView(block.text, textColor, isSnippetPreview)
@@ -761,7 +761,7 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
     }
 }
 
-fun Modifier.tripleClick(onTripleClick: () -> Unit): Modifier = this.pointerInput(Unit) {
+fun Modifier.doubleClick(onDoubleClick: () -> Unit): Modifier = this.pointerInput(Unit) {
     awaitEachGesture {
         val down1 = awaitFirstDown(requireUnconsumed = false)
         val up1 = waitForUpOrCancellation() ?: return@awaitEachGesture
@@ -770,12 +770,8 @@ fun Modifier.tripleClick(onTripleClick: () -> Unit): Modifier = this.pointerInpu
         if ((down2.position - down1.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
         val up2 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
 
-        val down3 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
-        if ((down3.position - down2.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
-        val up3 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
-
-        if (up3 != null) {
-            onTripleClick()
+        if (up2 != null) {
+            onDoubleClick()
         }
     }
 }
