@@ -7,13 +7,14 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -101,7 +102,6 @@ fun InteractiveMarkdownEditor(
 ) {
     val context = LocalContext.current
     var showInteractiveChecklistOverlay by remember { mutableStateOf(false) }
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val coroutineScope = rememberCoroutineScope()
 
 
@@ -328,12 +328,6 @@ fun InteractiveMarkdownEditor(
 
                 var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
 
-        LaunchedEffect(value.selection) {
-            val cursorRect = textLayoutResult?.getCursorRect(value.selection.start)
-            if (cursorRect != null) {
-                bringIntoViewRequester.bringIntoView(cursorRect)
-            }
-        }
 
         // Live Markdown Input Field with Instant Synchronous Save & Auto-Continuations
         BasicTextField(
@@ -375,8 +369,19 @@ fun InteractiveMarkdownEditor(
             },
 
             modifier = Modifier
-                .bringIntoViewRequester(bringIntoViewRequester)
                 .fillMaxWidth()
+                .bringIntoViewResponder(
+                    object : BringIntoViewResponder {
+                        override fun calculateRectForParent(localRect: Rect): Rect {
+                            // If the rect is very large (e.g. the whole text field on focus), ignore it to prevent jumping to bottom.
+                            // The cursor rect will be small (height ~ line height).
+                            return if (localRect.height > 100f) Rect.Zero else localRect
+                        }
+                        override suspend fun bringChildIntoView(localRequest: () -> Rect?) {
+                            // Let the parent handle it
+                        }
+                    }
+                )
                 .testTag("note_content_input")
         )
     }
