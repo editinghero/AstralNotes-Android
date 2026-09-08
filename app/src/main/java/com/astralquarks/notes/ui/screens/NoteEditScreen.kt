@@ -553,6 +553,14 @@ fun NoteEditScreen(
                                 contentValue = TextFieldValue(updated, TextRange(updated.length))
                                 persistChanges()
                             },
+                            onBlockEdit = { startOff, endOff, newText ->
+                                val currentText = contentValue.text
+                                val actualStart = startOff.coerceAtLeast(0)
+                                val actualEnd = endOff.coerceAtMost(currentText.length)
+                                val updated = currentText.substring(0, actualStart) + newText + currentText.substring(actualEnd)
+                                contentValue = TextFieldValue(updated, TextRange(actualStart + newText.length))
+                                persistChanges()
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

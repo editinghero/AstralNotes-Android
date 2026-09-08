@@ -49,6 +49,11 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -76,13 +81,18 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.SubcomposeAsyncImage
 
+import com.astralquarks.notes.ui.components.InteractiveMarkdownEditor
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+
 @Composable
 fun MarkdownRenderer(
     markdown: String,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier,
     isSnippetPreview: Boolean = false,
-    onChecklistToggle: ((TaskItem) -> Unit)? = null
+    onChecklistToggle: ((TaskItem) -> Unit)? = null,
+    onBlockEdit: ((Int, Int, String) -> Unit)? = null
 ) {
     val contentToParse = remember(markdown, isSnippetPreview) {
         if (isSnippetPreview && markdown.length > 300) {
@@ -93,14 +103,51 @@ fun MarkdownRenderer(
     }
     val blocks = remember(contentToParse) { MarkdownParser.parse(contentToParse) }
     val displayBlocks = if (isSnippetPreview) blocks.take(4) else blocks
+    var editingBlockIndex by remember { mutableStateOf<Int?>(null) }
 
     CompositionLocalProvider(LocalContentColor provides textColor) {
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(if (isSnippetPreview) 4.dp else 10.dp)
         ) {
-            displayBlocks.forEach { block ->
-                when (block) {
+            displayBlocks.forEachIndexed { index, block ->
+                if (editingBlockIndex == index && onBlockEdit != null && !isSnippetPreview) {
+                    // Extract block raw text
+                    val blockRawText = try {
+                        markdown.substring(block.startOffset, block.endOffset)
+                    } catch (e: Exception) {
+                        ""
+                    }
+                    var editValue by remember(index) { mutableStateOf(TextFieldValue(blockRawText, TextRange(blockRawText.length))) }
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f), RoundedCornerShape(8.dp)).padding(8.dp)) {
+                        Column {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                IconButton(onClick = {
+                                    if (editValue.text != blockRawText) {
+                                        onBlockEdit(block.startOffset, block.endOffset, editValue.text)
+                                    }
+                                    editingBlockIndex = null
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Check, "Save Edit", tint = MaterialTheme.colorScheme.primary, modifier=Modifier.size(20.dp))
+                                }
+                            }
+                            InteractiveMarkdownEditor(
+                                value = editValue,
+                                onValueChange = { editValue = it },
+                                textColor = textColor,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                } else {
+                    val onTripleClickBlock: () -> Unit = {
+                        if (!isSnippetPreview && onBlockEdit != null) {
+                            editingBlockIndex = index
+                        }
+                    }
+                    Box(modifier = Modifier.tripleClick(onTripleClickBlock)) {
+                        when (block) {
                     is MarkdownBlock.Heading -> HeadingBlockView(block, textColor, isSnippetPreview)
                     is MarkdownBlock.Paragraph -> ParagraphBlockView(block.text, textColor, isSnippetPreview)
                     is MarkdownBlock.Blockquote -> if (!isSnippetPreview) BlockquoteBlockView(block) else Text(text = block.lines.joinToString(" "), style = MaterialTheme.typography.bodyMedium.copy(color = textColor), maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -115,6 +162,8 @@ fun MarkdownRenderer(
                     ) else null
                     is MarkdownBlock.ImageBlock -> if (!isSnippetPreview) ImageBlockView(block.alt, block.url) else null
                     is MarkdownBlock.Details -> if (!isSnippetPreview) DetailsBlockView(block, textColor, onChecklistToggle) else null
+                        }
+                    }
                 }
             }
         }
@@ -708,6 +757,25 @@ private fun DetailsBlockView(block: MarkdownBlock.Details, textColor: Color, onC
                     )
                 }
             }
+        }
+    }
+}
+
+fun Modifier.tripleClick(onTripleClick: () -> Unit): Modifier = this.pointerInput(Unit) {
+    awaitEachGesture {
+        val down1 = awaitFirstDown(requireUnconsumed = false)
+        val up1 = waitForUpOrCancellation() ?: return@awaitEachGesture
+
+        val down2 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
+        if ((down2.position - down1.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+        val up2 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
+
+        val down3 = withTimeoutOrNull(300) { awaitFirstDown(requireUnconsumed = false) } ?: return@awaitEachGesture
+        if ((down3.position - down2.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+        val up3 = withTimeoutOrNull(300) { waitForUpOrCancellation() } ?: return@awaitEachGesture
+
+        if (up3 != null) {
+            onTripleClick()
         }
     }
 }

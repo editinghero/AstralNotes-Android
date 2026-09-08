@@ -1,6 +1,9 @@
 package com.astralquarks.notes.markdown
 
 sealed class MarkdownBlock {
+    var startOffset: Int = 0
+    var endOffset: Int = 0
+
     data class Heading(val level: Int, val text: String) : MarkdownBlock()
     data class Paragraph(val text: String) : MarkdownBlock()
     data class Blockquote(val lines: List<String>, val alertType: AlertType? = null) : MarkdownBlock()
@@ -39,11 +42,22 @@ object MarkdownParser {
         if (markdown.isBlank()) return emptyList()
         val lines = markdown.lines()
         val blocks = mutableListOf<MarkdownBlock>()
+
+        // Pre-calculate line offsets
+        val lineOffsets = IntArray(lines.size)
+        var currentGlobalOffset = 0
+        for (idx in lines.indices) {
+            lineOffsets[idx] = currentGlobalOffset
+            val originalNewlineLen = if (currentGlobalOffset + lines[idx].length < markdown.length && markdown[currentGlobalOffset + lines[idx].length] == '\r') 2 else 1
+            currentGlobalOffset += lines[idx].length + originalNewlineLen
+        }
+
         var i = 0
 
         while (i < lines.size) {
             val line = lines[i]
             val trimmed = line.trim()
+            val blockStartOffset = lineOffsets[i]
 
             // Blank line
             if (trimmed.isEmpty()) {
@@ -51,14 +65,17 @@ object MarkdownParser {
                 continue
             }
 
-            // Horizontal Rule (---, ***, ___)
+            // Horizontal Rule (--- or *** or ___)
             if (trimmed.matches(Regex("^([\\-*_]\\s*){3,}$"))) {
-                blocks.add(MarkdownBlock.HorizontalRule)
+                val block = MarkdownBlock.HorizontalRule
+                block.startOffset = blockStartOffset
+                block.endOffset = blockStartOffset + line.length
+                blocks.add(block)
                 i++
                 continue
             }
 
-            // Fenced Code Block (```lang ... ```)
+            // Code Block (```)
             if (trimmed.startsWith("```")) {
                 val language = trimmed.removePrefix("```").trim()
                 val codeLines = mutableListOf<String>()
@@ -67,10 +84,14 @@ object MarkdownParser {
                     codeLines.add(lines[i])
                     i++
                 }
+                var endOff = if (i < lines.size) lineOffsets[i] + lines[i].length else markdown.length
                 if (i < lines.size && lines[i].trim().startsWith("```")) {
                     i++ // skip closing ```
                 }
-                blocks.add(MarkdownBlock.CodeBlock(language, codeLines.joinToString("\n")))
+                val block = MarkdownBlock.CodeBlock(language, codeLines.joinToString("\n"))
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
                 continue
             }
 
@@ -79,10 +100,14 @@ object MarkdownParser {
             if (imgMatch != null) {
                 val alt = imgMatch.groupValues[1]
                 val url = imgMatch.groupValues[2]
-                blocks.add(MarkdownBlock.ImageBlock(alt, url))
+                val block = MarkdownBlock.ImageBlock(alt, url)
+                block.startOffset = blockStartOffset
+                block.endOffset = blockStartOffset + line.length
+                blocks.add(block)
                 i++
                 continue
             }
+
             // Details (<details><summary>...</summary>...</details>)
             if (trimmed.startsWith("<details>", ignoreCase = true)) {
                 val detailLines = mutableListOf<String>()
@@ -106,10 +131,14 @@ object MarkdownParser {
                     }
                     i++
                 }
+                var endOff = if (i < lines.size) lineOffsets[i] + lines[i].length else markdown.length
                 if (i < lines.size && lines[i].trim().startsWith("</details>", ignoreCase = true)) {
                     i++
                 }
-                blocks.add(MarkdownBlock.Details(summaryText, detailLines.joinToString("\n").trim()))
+                val block = MarkdownBlock.Details(summaryText, detailLines.joinToString("\n").trim())
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
                 continue
             }
 
@@ -119,7 +148,10 @@ object MarkdownParser {
                 val hashCount = trimmed.takeWhile { it == '#' }.length
                 if (hashCount in 1..6 && trimmed.length > hashCount && trimmed[hashCount] == ' ') {
                     val headingText = trimmed.substring(hashCount).trim()
-                    blocks.add(MarkdownBlock.Heading(hashCount, headingText))
+                    val block = MarkdownBlock.Heading(hashCount, headingText)
+                    block.startOffset = blockStartOffset
+                    block.endOffset = blockStartOffset + line.length
+                    blocks.add(block)
                     i++
                     continue
                 }
@@ -145,7 +177,11 @@ object MarkdownParser {
                     }
                     i++
                 }
-                blocks.add(MarkdownBlock.Blockquote(quoteLines, alertType))
+                val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                val block = MarkdownBlock.Blockquote(quoteLines, alertType)
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
                 continue
             }
 
@@ -159,7 +195,11 @@ object MarkdownParser {
                     taskItems.add(TaskItem(checked = isChecked, text = taskText, rawLineIndex = i))
                     i++
                 }
-                blocks.add(MarkdownBlock.TaskList(taskItems))
+                val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                val block = MarkdownBlock.TaskList(taskItems)
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
                 continue
             }
 
@@ -172,7 +212,11 @@ object MarkdownParser {
                     i++
                 }
                 if (items.isNotEmpty()) {
-                    blocks.add(MarkdownBlock.BulletList(items))
+                    val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                    val block = MarkdownBlock.BulletList(items)
+                    block.startOffset = blockStartOffset
+                    block.endOffset = endOff
+                    blocks.add(block)
                 } else {
                     i++ // Safe advance
                 }
@@ -196,7 +240,11 @@ object MarkdownParser {
                     }
                 }
                 if (items.isNotEmpty()) {
-                    blocks.add(MarkdownBlock.NumberedList(items))
+                    val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                    val block = MarkdownBlock.NumberedList(items)
+                    block.startOffset = blockStartOffset
+                    block.endOffset = endOff
+                    blocks.add(block)
                 } else {
                     i++ // Safe advance
                 }
@@ -213,7 +261,11 @@ object MarkdownParser {
                     rows.add(rowCells)
                     i++
                 }
-                blocks.add(MarkdownBlock.Table(headerRow, rows))
+                val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                val block = MarkdownBlock.Table(headerRow, rows)
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
                 continue
             }
 
@@ -232,7 +284,11 @@ object MarkdownParser {
                 i++
             }
             if (paragraphLines.isNotEmpty()) {
-                blocks.add(MarkdownBlock.Paragraph(paragraphLines.joinToString("\n")))
+                val endOff = if (i > 0) lineOffsets[i - 1] + lines[i - 1].length else blockStartOffset
+                val block = MarkdownBlock.Paragraph(paragraphLines.joinToString("\n"))
+                block.startOffset = blockStartOffset
+                block.endOffset = endOff
+                blocks.add(block)
             } else {
                 i++
             }
@@ -240,11 +296,7 @@ object MarkdownParser {
 
         return blocks
     }
-
-    /**
-     * Toggles a checkbox in the markdown text given task text and line index.
-     */
-    fun toggleChecklist(markdown: String, taskItem: TaskItem): String {
+fun toggleChecklist(markdown: String, taskItem: TaskItem): String {
         val lines = markdown.lines().toMutableList()
         if (taskItem.rawLineIndex in 0 until lines.size) {
             val line = lines[taskItem.rawLineIndex]
