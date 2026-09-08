@@ -12,9 +12,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.relocation.BringIntoViewResponder
-import androidx.compose.foundation.relocation.bringIntoViewResponder
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -370,18 +367,6 @@ fun InteractiveMarkdownEditor(
 
             modifier = Modifier
                 .fillMaxWidth()
-                .bringIntoViewResponder(
-                    object : BringIntoViewResponder {
-                        override fun calculateRectForParent(localRect: Rect): Rect {
-                            // If the rect is very large (e.g. the whole text field on focus), ignore it to prevent jumping to bottom.
-                            // The cursor rect will be small (height ~ line height).
-                            return if (localRect.height > 100f) Rect.Zero else localRect
-                        }
-                        override suspend fun bringChildIntoView(localRequest: () -> Rect?) {
-                            // Let the parent handle it
-                        }
-                    }
-                )
                 .testTag("note_content_input")
         )
     }
